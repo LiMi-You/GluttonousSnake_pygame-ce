@@ -1,0 +1,10 @@
+# Python 项目示例
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+
+# 操作系统相关
+.DS_Store
+Thumbs.db
