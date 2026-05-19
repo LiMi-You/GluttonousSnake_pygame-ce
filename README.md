@@ -1,6 +1,8 @@
 # GluttonousSnake_pygame-ce
 这是一个基于Python语言的贪吃蛇
-当前版本Ver1.0项目的目录结构
+<br><br><br>
+当前版本Ver2.0项目的目录结构
+```text
 my_pygame_game/
 │
 ├── main.py              # 🚪 游戏入口：只做初始化、主循环、状态切换
