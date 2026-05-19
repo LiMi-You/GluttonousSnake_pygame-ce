@@ -1,35 +1,36 @@
 # scenes/start_screen.py
 import pygame
 from settings import SCREEN_WIDTH, SCREEN_HEIGHT
+from scenes.base_scene import Scene
 
-class StartScreen:
+class StartScreen(Scene):
     def __init__(self, screen):
         self.screen = screen
         # 加载背景图（先放一张测试图，后续替换成你的美工资源）
         self.background = pygame.image.load("assets/images/start_bg.png").convert()
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
         
-    def handle_events(self):
-        """处理开始页的输入事件"""
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return "QUIT"  # 返回退出信号
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:  # 按回车进入游戏
-                    return "GAME"  # 返回切换信号
-                if event.key == pygame.K_ESCAPE:  # 按 ESC 退出
-                    return "QUIT"
-        return "START"  # 保持在开始页
+        # 准备文字（可以抽到单独的方法中，但简单项目放在 __init__ 也可）
+        self.font = pygame.font.Font(None, 36)
+        self.text_surface = self.font.render("Press ENTER to Start", True, (255, 255, 255))
+        # 动态计算文字位置（相对于屏幕，支持分辨率自适应）
+        self.text_rect = self.text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100))
+    
+    def handle_event(self, event):
+        """处理单个事件，返回场景切换信号"""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RETURN:
+                return "GAME"      # 切换到游戏场景
+            if event.key == pygame.K_ESCAPE:
+                return "QUIT"      # 退出游戏
+        # 可以继续处理其他事件（如鼠标点击）
+        return None   # 没有切换需求
     
     def update(self):
-        """开始页不需要每帧更新逻辑，留空"""
+        """开始页不需要动态更新，留空"""
         pass
     
-    def draw(self):
-        """渲染开始页"""
-        self.screen.blit(self.background, (0, 0))
-        # 可以加一些文字提示
-        font = pygame.font.Font(None, 36)
-        text = font.render("Press ENTER to Start", True, (255, 255, 255))
-        text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100))
-        self.screen.blit(text, text_rect)
+    def draw(self, screen):
+        """绘制开始页"""
+        screen.blit(self.background, (0, 0))
+        screen.blit(self.text_surface, self.text_rect)
