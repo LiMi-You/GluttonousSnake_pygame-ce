@@ -28,6 +28,6 @@ my_pygame_game/
 │   └── helpers.py
 │
 └── README.md            # 📝 项目说明 & 开发笔记
-
+```
 
 [项目Ver3.0版本更新说明](docs/CHANGELOG.md)
