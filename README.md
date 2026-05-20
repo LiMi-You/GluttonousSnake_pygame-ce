@@ -6,7 +6,9 @@
 my_pygame_game/
 │
 ├── main.py              # 🚪 游戏入口：只做初始化、主循环、状态切换
-├── settings.py          # ⚙️ 配置中心：屏幕大小、颜色、速度、字体路径等（杜绝魔法数字）
+├── scene_manager.py     # 场景管理器（核心）
+├── input_manager.py     # 输入中枢（核心）
+├── settings.py          # ⚙️ 配置中心：屏幕大小、颜色、速度、字体路径等（杜绝魔法数字）、仅存纯配置常量
 ├── assets/              # 🎨 所有资源（统一放这里，代码里用相对路径加载）
 │   ├── images/          #   .png, .jpg, .gif
 │   │   └── start_bg.png
@@ -26,3 +28,6 @@ my_pygame_game/
 │   └── helpers.py
 │
 └── README.md            # 📝 项目说明 & 开发笔记
+
+
+[项目Ver3.0版本更新说明](docs/CHANGELOG.md)

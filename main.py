@@ -2,6 +2,8 @@
 import pygame
 import sys
 from settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
+from input_manager import InputManager
+from scene_manager import SceneManager
 from scenes.start_screen import StartScreen
 # 后续会创建 GameScreen，提前导入占位
 # from scenes.game_screen import GameScreen
@@ -12,45 +14,36 @@ def main():
     pygame.display.set_caption("My Pygame Game")
     clock = pygame.time.Clock()
 
-    # 场景管理
-    scenes = {
-        "START": StartScreen(screen),
-        # "GAME": GameScreen(screen),   # 后续实现
-    }
-    current_scene_key = "START"
-    current_scene = scenes[current_scene_key]
-    current_scene.on_enter()  # 进入开始场景（如果有初始化逻辑）
+    # 1️⃣ 初始化输入与场景管理器
+    # 2️⃣ 创建场景管理器（必须在 screen 创建之后！）
+    input_mgr = InputManager()
+    scene_mgr = SceneManager(screen, input_mgr)
+
+    # 2️⃣ 注册场景（此时 screen 已存在，实例化安全）
+    scene_mgr.add_scene("START", StartScreen(screen))
+    # scene_mgr.add_scene("GAME", GameScreen(screen))
+
+    # 3️⃣ 初始化默认场景
+    scene_mgr.switch("START")
 
     running = True
-    while running:
-        # 1. 事件处理（统一获取，分发给当前场景）
-        for event in pygame.event.get():
+    while running and scene_mgr.is_running:
+        # 事件处理：交给管理器，它会自动处理场景切换指令
+        events = pygame.event.get()
+        for event in events:
             if event.type == pygame.QUIT:
-                running = False
+                scene_mgr.switch("QUIT")
                 break
-            # 将事件交给当前场景处理
-            next_key = current_scene.handle_event(event)
-            if next_key is not None:
-                # 需要切换场景
-                if next_key == "QUIT":
-                    running = False
-                    break
-                if next_key in scenes:
-                    current_scene.on_exit()       # 离开旧场景
-                    current_scene = scenes[next_key]
-                    current_scene_key = next_key
-                    current_scene.on_enter()      # 进入新场景
-                # 如果 next_key 不在 scenes 中，可以打印警告或忽略
         
-        # 2. 更新当前场景逻辑
-        current_scene.update()
-        
-        # 3. 绘制当前场景
-        current_scene.draw(screen)
-        
+        scene_mgr.handle_frame(events)
+
+        # 更新 & 绘制
+        scene_mgr.update()
+        scene_mgr.draw()
+
         pygame.display.flip()
         clock.tick(FPS)
-    
+
     pygame.quit()
     sys.exit()
 
