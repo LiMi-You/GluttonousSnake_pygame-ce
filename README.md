@@ -13,9 +13,11 @@ my_pygame_game/
 │   ├── images/          #   .png, .jpg, .gif
 │   │   └── start_bg.png
 │   ├── sounds/          #   .wav, .ogg, .mp3
+│   │   └── start_bgm.png
 │   └── fonts/           #   .ttf, .otf
 ├── scenes/              # 游戏场景资源
 │   ├── __init__.py
+│   ├── registry.py
 │   ├── base_scene.py
 │   └── start_screen.py
 ├── entities/            # 👾 游戏实体：玩家、敌人、子弹、道具等（每个文件一个类）
@@ -27,7 +29,11 @@ my_pygame_game/
 │   ├── __init__.py
 │   └── helpers.py
 │
+├── docs/              
+│   ├── CHANGELOG_OLD.md
+│   └── CHANGELOG.md
+│
 └── README.md            # 📝 项目说明 & 开发笔记
 ```
 
-[项目Ver3.0版本更新说明](docs/CHANGELOG.md)
+[项目Ver4.0版本更新说明](docs/CHANGELOG.md)

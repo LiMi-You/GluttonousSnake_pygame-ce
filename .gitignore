@@ -8,3 +8,4 @@ __pycache__/
 # 操作系统相关
 .DS_Store
 Thumbs.db
+(docs/CHANGELOG.md is just a markdown file, no need to ignore)

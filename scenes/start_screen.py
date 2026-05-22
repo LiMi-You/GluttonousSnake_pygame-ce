@@ -1,6 +1,6 @@
 # scenes/start_screen.py
 import pygame
-from settings import SCREEN_WIDTH, SCREEN_HEIGHT
+from settings import SCREEN_WIDTH, SCREEN_HEIGHT, COLORS
 from scenes.base_scene import Scene
 
 class StartScreen(Scene):
@@ -17,10 +17,13 @@ class StartScreen(Scene):
         self.text_rect = self.text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100))
         
         #按钮区域
-        self.btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 120, SCREEN_HEIGHT//2 + 20, 240, 60)
+        self.btn_rect = pygame.Rect(SCREEN_WIDTH // 2 , SCREEN_HEIGHT - 100, 240, 60)
+        self.btn_text = self.font.render("CLICK TO START", True, COLORS["bg"])
 
     def on_enter(self): 
         print("🟢 进入 START")
+        pygame.mixer.music.load("assets/sounds/start_bgm.mp3")
+        pygame.mixer.music.play(-1,0,0)
     
     def on_exit(self): 
         print("🔴 离开 START")
@@ -55,3 +58,5 @@ class StartScreen(Scene):
         """绘制开始页"""
         screen.blit(self.background, (0, 0))
         screen.blit(self.text_surface, self.text_rect)
+        pygame.draw.rect(self.screen, COLORS["white"], self.btn_rect, border_radius=10)
+        self.screen.blit(self.btn_text, self.btn_text.get_rect(center=self.btn_rect.center))

@@ -9,7 +9,7 @@ class InputManager:
         
         # 🔑 全局快捷键（任何场景都优先拦截）
         self.global_map = {
-            pygame.K_ESCAPE: "PAUSE",
+            pygame.K_ESCAPE: "GLOBAL_QUIT",
             pygame.K_F11: "TOGGLE_FULLSCREEN"
         }
         
@@ -19,7 +19,7 @@ class InputManager:
                 pygame.K_UP: "NAV_UP",
                 pygame.K_DOWN: "NAV_DOWN",
                 pygame.K_RETURN: "CONFIRM",
-                pygame.K_SPACE: "CONFIRM"
+                pygame.K_SPACE: "CONFIRM",
             },
             "GAME": {
                 pygame.K_LEFT: "MOVE_LEFT",
