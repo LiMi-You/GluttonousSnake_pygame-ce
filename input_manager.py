@@ -28,6 +28,13 @@ class InputManager:
                 pygame.K_DOWN: "MOVE_DOWN",
                 pygame.K_z: "ATTACK",
                 pygame.K_x: "JUMP"
+            },
+            "OVERLAY": {
+                pygame.K_LEFT: "NAV_LEFT",
+                pygame.K_RIGHT: "NAV_RIGHT",
+                pygame.K_RETURN: "CONFIRM",
+                pygame.K_SPACE: "CONFIRM",
+                pygame.K_ESCAPE: "CANCEL",
             }
         }
 
@@ -50,7 +57,7 @@ class InputManager:
                 self._just_pressed.add(event.key)
 
                 #测试用排查断点
-                print(f"⌨️ 捕获按键: {pygame.key.name(event.key)} (code: {event.key})")
+                # print(f"⌨️ 捕获按键: {pygame.key.name(event.key)} (code: {event.key})")
 
             elif event.type == pygame.KEYUP:
                 self._pressed.discard(event.key)
@@ -59,7 +66,7 @@ class InputManager:
         """返回标准化输入数据，供场景消费"""
 
         #测试用排查断点
-        print(f"🔍 当前上下文: '{self.context}' | 可用映射: {list(self.context_maps.get(self.context, {}).keys())}")
+        # print(f"🔍 当前上下文: '{self.context}' | 可用映射: {list(self.context_maps.get(self.context, {}).keys())}")
 
         global_actions = []
         context_actions = []
@@ -72,7 +79,7 @@ class InputManager:
                 context_actions.append(ctx_map[key])
 
         #测试用排查断点
-        print(f"🗺️ 映射结果 -> global: {global_actions} | context: {context_actions}")
+        # print(f"🗺️ 映射结果 -> global: {global_actions} | context: {context_actions}")
 
         return {
             "global": global_actions,

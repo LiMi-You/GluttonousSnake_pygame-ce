@@ -8,7 +8,7 @@ class StartScreen(Scene):
         self.screen = screen
         # 加载背景图（先放一张测试图，后续替换成你的美工资源）
         self.background = pygame.image.load("assets/images/start_bg.png").convert()
-        self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.background = pygame.transform.scale(self.background, (1017, 720))
         
         # 准备文字（可以抽到单独的方法中，但简单项目放在 __init__ 也可）
         self.font = pygame.font.Font(None, 36)
@@ -33,8 +33,8 @@ class StartScreen(Scene):
         处理单个事件，返回场景切换信号
         ✅ 场景只关心“动作”，不关心是键盘、手柄还是鼠标
         """
-         #测试用排查断点
-        print(f"🎮 场景输入状态: {input_state}")
+        #测试用排查断点
+        # print(f"🎮 场景输入状态: {input_state}")
 
         if "CONFIRM" in input_state["context"]:
             return "GAME"
@@ -56,7 +56,8 @@ class StartScreen(Scene):
     
     def draw(self, screen):
         """绘制开始页"""
-        screen.blit(self.background, (0, 0))
+        super().draw(self.screen)
+        screen.blit(self.background, (131, 0))
         screen.blit(self.text_surface, self.text_rect)
         pygame.draw.rect(self.screen, COLORS["white"], self.btn_rect, border_radius=10)
         self.screen.blit(self.btn_text, self.btn_text.get_rect(center=self.btn_rect.center))

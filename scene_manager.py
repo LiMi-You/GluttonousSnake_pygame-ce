@@ -2,6 +2,7 @@
 import pygame
 from scenes.registry import get_scene_class, SCENE_REGISTRY
 from input_manager import InputManager
+from quit_overlay import QuitOverlay
 
 class SceneManager:
     def __init__(self, screen, initial_scene_id: str, input_manager: InputManager):
@@ -10,6 +11,9 @@ class SceneManager:
         self.current_scene_id = None
         self.current_scene = None
         self._running = True
+
+        # 退出确认覆盖层
+        self.quit_overlay = QuitOverlay(screen.get_width(), screen.get_height())
 
         # 初始化第一个场景
         self.switch(initial_scene_id)
@@ -53,28 +57,51 @@ class SceneManager:
         self.input_manager.process_events(events)
         actions = self.input_manager.get_actions()
         
-        # 2. 全局拦截 (如 ESC 退出, Alt+Enter 全屏)
-        if "GLOBAL_QUIT" in actions["global"]:
-            return False # 返回 False 表示结束主循环
+        # 2. 全局拦截 (Alt+Enter 全屏)
         if "TOGGLE_FULLSCREEN" in actions["global"]:
             pygame.display.toggle_fullscreen()
-            pass
+        
+        # ── 退出覆盖层逻辑 ──
+        if self.quit_overlay.active:
+            # 覆盖层激活时：临时切到 OVERLAY 上下文重新映射按键
+            # 注意：不重新调用 process_events，否则会清空 _just_pressed
+            saved_ctx = self.input_manager.context
+            self.input_manager.set_context("OVERLAY")
+            overlay_actions = self.input_manager.get_actions()
+            self.input_manager.context = saved_ctx  # 恢复原上下文
+
+            # 叠加鼠标状态，供覆盖层检测按钮点击
+            mouse_pressed = pygame.mouse.get_pressed()
+            overlay_actions["mouse_clicked"] = mouse_pressed[0]
+            overlay_actions["mouse_pos"] = pygame.mouse.get_pos()
+
+            result = self.quit_overlay.handle_input(overlay_actions)
+            if result is True:
+                return False  # 用户确认退出
+            # False 或 None → 继续渲染
+        else:
+            # 覆盖层未激活：ESC → 显示覆盖层（不直接退出）
+            if "GLOBAL_QUIT" in actions["global"]:
+                self.quit_overlay.show()
+                # 不 return False，继续渲染，让用户看到原场景+覆盖层
         
         # 🔸 兜底处理：场景为空时只处理全局事件，跳过渲染
         if not self.current_scene:
             return True
     
-        # 3. 交给当前场景处理
-        # 场景返回一个字符串表示需要切换到的下一个场景ID，若无则返回 None
-        next_scene_id = self.current_scene.handle_input(actions)
-        
-        if next_scene_id and next_scene_id != self.current_scene_id:
-            self.switch(next_scene_id)
+        # 3. 交给当前场景处理（覆盖层激活时跳过，防止按键干扰）
+        if not self.quit_overlay.active:
+            next_scene_id = self.current_scene.handle_input(actions)
+            if next_scene_id and next_scene_id != self.current_scene_id:
+                self.switch(next_scene_id)
             
         # 4. 场景更新逻辑 (非输入相关的逻辑)
         self.current_scene.update()
         
         # 5. 场景渲染
         self.current_scene.draw(self.screen)
+        
+        # 6. 覆盖层渲染（在场景之上）
+        self.quit_overlay.draw(self.screen)
         
         return True # 继续循环

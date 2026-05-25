@@ -38,4 +38,5 @@ class Scene:
 
     def draw(self, screen: pygame.Surface):
         """每帧绘制（背景、UI、角色等）"""
+        screen.fill((255,255,255))
         pass

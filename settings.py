@@ -1,7 +1,7 @@
 # settings.py
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
-FPS = 1
+FPS = 25
 COLORS = {
     "bg": "purple",
     "white": (255, 255, 255),
