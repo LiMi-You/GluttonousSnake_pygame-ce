@@ -25,7 +25,7 @@ class QuitOverlay:
 
         # 字体
         self.font_title = pygame.font.Font("assets/fonts/SmileySans-Oblique.ttf", 28)
-        self.font_btn = pygame.font.Font(None, 40)
+        self.font_btn = pygame.font.Font("assets/fonts/SmileySans-Oblique.ttf", 30)
 
         # 预计算按钮矩形，供 draw 和鼠标检测复用
         self.btn_rects = self._compute_button_rects()
@@ -171,7 +171,7 @@ class QuitOverlay:
             screen.blit(btn_surf, btn_surf_rect)
 
         # ── 底部提示 ──
-        hint = pygame.font.Font(None, 24).render(
+        hint = pygame.font.Font("assets/fonts/SmileySans-Oblique.ttf", 16).render(
             "← → 切换选项  Enter/Space 确认  ESC 取消",
             True,
             (160, 160, 180),

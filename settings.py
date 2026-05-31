@@ -1,16 +1,60 @@
 # settings.py
+# ==================== 屏幕 & 性能 ====================
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 25
+
+# ==================== 通用颜色 ====================
 COLORS = {
     "bg": "purple",
     "white": (255, 255, 255),
-    "black": (0, 0, 0)
+    "black": (0, 0, 0),
 }
 
-# 新增：场景状态
+# ==================== 场景ID常量 ====================
 SCENES = {
     "START": "start",
+    "LOBBY": "lobby",
     "GAME": "game",
-    "END": "end"
+    "END": "end",
 }
+
+# ==================== 贪吃蛇游戏参数 ====================
+# 网格尺寸
+CELL_SIZE = 21                     # 每个格子的像素大小
+GRID_WIDTH = 29                    # 网格列数
+GRID_HEIGHT = 25                   # 网格行数
+
+# 游戏区域偏移（自动居中）
+MARGIN_LEFT = SCREEN_WIDTH // 2 - (CELL_SIZE * GRID_WIDTH) // 2
+MARGIN_TOP = 146                   # 游戏区域上边距
+
+# 蛇的初始数据（网格坐标）
+SNAKE_INITIAL = [(10, 7), (9, 7), (8, 7)]   # 头在右边，初始向右移动
+SNAKE_INITIAL_DIRECTION = (1, 0)             # 初始方向：向右
+
+# 移动间隔（毫秒），值越大蛇移动越慢
+MOVE_INTERVAL = 150
+
+# 贪吃蛇颜色
+SNAKE_COLOR = (254, 159, 43)       # 蛇身填充色（橙色）
+SNAKE_BORDER_COLOR = (0, 0, 0)     # 蛇身边框色（黑色）
+SNAKE_BORDER_WIDTH = 2             # 边框线宽
+
+# 食物颜色
+FOOD_COLOR = (255, 50, 50)         # 食物填充色（红色）
+
+# 网格线颜色
+GRID_LINE_COLOR = (54, 188, 217)   # 网格线颜色（青蓝）
+GRID_LINE_WIDTH = 2                # 网格线宽
+
+# 游戏背景色
+GAME_BG_COLOR = (40, 40, 40)       # 深灰背景
+
+# 游戏背景图层（相对于 assets/images/）
+GAME_BG_LAYERS = [
+    "bg_stripe.png",
+    "left_and_right.png",
+    "Large_format.png",
+    "Score_board.png",
+]

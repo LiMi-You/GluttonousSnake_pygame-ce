@@ -37,12 +37,12 @@ class StartScreen(Scene):
         # print(f"🎮 场景输入状态: {input_state}")
 
         if "CONFIRM" in input_state["context"]:
-            return "GAME"
+            return "LOBBY"
         
          # 鼠标点击仍可直接处理（UI交互常见，，不强制走 InputManager）
         if pygame.mouse.get_pressed()[0]:
             if self.btn_rect.collidepoint(pygame.mouse.get_pos()):
-                return "GAME"
+                return "LOBBY"
             
 
         return None
@@ -59,5 +59,5 @@ class StartScreen(Scene):
         super().draw(self.screen)
         screen.blit(self.background, (131, 0))
         screen.blit(self.text_surface, self.text_rect)
-        pygame.draw.rect(self.screen, COLORS["white"], self.btn_rect, border_radius=10)
+        pygame.draw.rect(self.screen, COLORS["white"], self.btn_rect, border_radius=10, width=1)
         self.screen.blit(self.btn_text, self.btn_text.get_rect(center=self.btn_rect.center))

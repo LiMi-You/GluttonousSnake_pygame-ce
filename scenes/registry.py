@@ -1,14 +1,13 @@
 # scenes/registry.py
 from .start_screen import StartScreen
-# 未来新增场景在这里导入
+from .lobby_screen import LobbyScreen
+from .game_screen import GameScreen
 
 # 场景工厂注册表：key为场景ID字符串，value为场景类
 SCENE_REGISTRY = {
-    "START": StartScreen
-    # "MENU": MenuScene,
-    # "BATTLE": BattleScene,
-    # "DIALOGUE": DialogueScene,
-    # 未来新增场景在这里注册，例如: "SHOP": ShopScene
+    "START": StartScreen,
+    "LOBBY": LobbyScreen,
+    "GAME":  GameScreen,
 }
 
 def get_scene_class(scene_id: str):

@@ -8,6 +8,72 @@
 
 ---
 
+## [v0.6.0] - 2026-06-01
+
+### ✨ Added — 贪吃蛇核心玩法集成
+
+将 `Map_and_NPC_Design/main.py` 中的贪吃蛇游戏逻辑移植到框架中，实现完整的贪吃蛇玩法。
+
+#### 涉及文件
+
+| 文件 | 操作 |
+|:---|:---|
+| `entities/player.py` | **重写** — Snake 实体类，封装蛇身数据、方向控制、自碰检测、邻居感知渲染 |
+| `scenes/game_screen.py` | **新增** — 贪吃蛇游戏场景（GameScreen） |
+| `scenes/lobby_screen.py` | **重写** — 增加"开始游戏"按钮及悬停效果 |
+| `scenes/registry.py` | **修改** — 注册 `GAME` 场景 |
+| `settings.py` | **修改** — 新增贪吃蛇游戏参数常量区块 |
+| `input_manager.py` | **修改** — `CONTEXT_ALIAS` 新增 `"LOBBY"` 映射 |
+
+#### 改动详情
+
+**1. 重写 `entities/player.py` — Snake 类**
+- 蛇身数据：`body: list[tuple[int, int]]`，头在 index 0
+- 方向控制：`current_direction` / `next_direction` 双重管理，`set_direction()` 自动防反向
+- 移动逻辑：`move()` 在蛇头插入新坐标，根据 `just_ate` 标记决定是否移除尾
+- 自碰检测：`check_self_collision()` 判断蛇头是否与身体重叠
+- 坐标转换：`grid_to_pixel()` 静态方法，网格坐标 → 像素坐标
+- 邻居感知渲染：`draw()` 中检测每个蛇身段四方向的邻居，只在无邻居的方向绘制边框，内部接缝不可见
+
+**2. 新增 `scenes/game_screen.py` — GameScreen**
+- 输入集成：通过框架 `InputManager` 的 `MOVE_UP/DOWN/LEFT/RIGHT` 动作映射方向
+- 计时驱动：使用 `pygame.time.get_ticks()` 差值计算帧间时间，不依赖外部 clock 传参
+- 食物系统：随机生成于空白网格位置，避开蛇身
+- 碰撞检测：撞墙（越界）与撞自己两种判定
+- 游戏结束：半透明遮罩 + 最终得分 + 按键返回大厅
+- 多层背景加载：`GAME_BG_LAYERS` 列表驱动，缺失图片自动跳过不报错
+- 分数 HUD：左上角实时显示当前得分
+
+**3. 重写 `scenes/lobby_screen.py`**
+- 标题 + 副标题居中排版
+- 开始游戏按钮：`pygame.Rect` 碰撞检测 + 鼠标悬停高亮 + 键盘 Enter/Space 确认
+- 按钮预渲染两套文字（普通/高亮），避免每帧重复渲染
+
+**4. 修改 `scenes/registry.py`**
+- 新增 `GameScreen` 导入与注册：`"GAME": GameScreen`
+
+**5. 修改 `settings.py` — 游戏常量区块**
+- 网格参数：`CELL_SIZE`(21)、`GRID_WIDTH`(29)、`GRID_HEIGHT`(25)
+- 区域偏移：`MARGIN_LEFT`(自动居中)、`MARGIN_TOP`(146)
+- 蛇初始数据：`SNAKE_INITIAL`、`SNAKE_INITIAL_DIRECTION`
+- 移动间隔：`MOVE_INTERVAL`(150ms)
+- 颜色常量：`SNAKE_COLOR`、`SNAKE_BORDER_COLOR`、`FOOD_COLOR`、`GRID_LINE_COLOR`、`GAME_BG_COLOR`
+- 背景图层列表：`GAME_BG_LAYERS`
+
+**6. 修改 `input_manager.py`**
+- `CONTEXT_ALIAS` 新增 `"LOBBY": "MENU"`，大厅复用菜单导航映射
+
+#### 场景流转
+```
+START（开始画面） → CONFIRM → LOBBY（大厅）
+                                ├── 点击"开始游戏" → GAME（贪吃蛇）
+                                │                       ├── 撞墙/撞自己 → 游戏结束遮罩
+                                │                       └── 按任意键 → LOBBY
+                                └── ESC → 退出覆盖层 → 确认退出程序
+```
+
+---
+
 ## [v0.5.0] - 2024-05-25
 
 ### ✨ Added — 退出确认覆盖层 & 鼠标事件支持
