@@ -8,69 +8,96 @@
 
 ---
 
-## [v0.6.0] - 2026-06-01
+## [v0.6.0] - 2026-06-03
 
-### ✨ Added — 贪吃蛇核心玩法集成
-
-将 `Map_and_NPC_Design/main.py` 中的贪吃蛇游戏逻辑移植到框架中，实现完整的贪吃蛇玩法。
+### ✨ Added — 道具系统基础设施 & 统计管理器
 
 #### 涉及文件
 
 | 文件 | 操作 |
 |:---|:---|
-| `entities/player.py` | **重写** — Snake 实体类，封装蛇身数据、方向控制、自碰检测、邻居感知渲染 |
-| `scenes/game_screen.py` | **新增** — 贪吃蛇游戏场景（GameScreen） |
-| `scenes/lobby_screen.py` | **重写** — 增加"开始游戏"按钮及悬停效果 |
-| `scenes/registry.py` | **修改** — 注册 `GAME` 场景 |
-| `settings.py` | **修改** — 新增贪吃蛇游戏参数常量区块 |
-| `input_manager.py` | **修改** — `CONTEXT_ALIAS` 新增 `"LOBBY"` 映射 |
+| `items/item_defs.py` | **新增** — 道具定义表（`ItemDef` 数据类 + `ITEM_DEFS` 注册表） |
+| `items/item_base.py` | **新增** — 道具实例基类（`ItemInstance`，位置/占格/碰撞检测） |
+| `items/item_manager.py` | **新增** — 道具管理器（生成计时、空闲位置查找、蛇头碰撞检测） |
+| `items/__init__.py` | **新增** — 道具系统包导出 |
+| `utils/stats_manager.py` | **新增** — 统计管理器（分数/蛇长/连击/收集计数） |
+| `utils/__init__.py` | **修改** — 导出 `StatsManager` |
+| `settings.py` | **修改** — 新增道具系统常量（`ITEM_RENDER_SIZE`、`ITEM_SPAWN_INTERVAL` 等） |
+| `scenes/game_screen.py` | **修改** — 集成 `ItemManager` + `StatsManager`，移除旧食物系统 |
 
 #### 改动详情
 
-**1. 重写 `entities/player.py` — Snake 类**
-- 蛇身数据：`body: list[tuple[int, int]]`，头在 index 0
-- 方向控制：`current_direction` / `next_direction` 双重管理，`set_direction()` 自动防反向
-- 移动逻辑：`move()` 在蛇头插入新坐标，根据 `just_ate` 标记决定是否移除尾
-- 自碰检测：`check_self_collision()` 判断蛇头是否与身体重叠
-- 坐标转换：`grid_to_pixel()` 静态方法，网格坐标 → 像素坐标
-- 邻居感知渲染：`draw()` 中检测每个蛇身段四方向的邻居，只在无邻居的方向绘制边框，内部接缝不可见
+**1. 道具系统（`items/` 包）**
+- `ItemDef` 数据类：定义道具类型配置（ID、名称、占格大小、权重、颜色、分数值、图片资源）
+- `ItemInstance` 实例类：表示地图上的一个具体道具，提供 `contains()` 和 `occupied_cells` 属性
+- `ItemManager` 管理器：
+  - 基于计时器的自动生成机制（`ITEM_SPAWN_INTERVAL = 2000ms`）
+  - 初始生成数量控制（`ITEM_BASE_SPAWN_COUNT = 3`）
+  - 场上总量上限（`ITEM_MAX_ON_SCREEN = 8`）
+  - 单类型上限（基于 `max_on_screen`）
+  - `_find_valid_position()` —— 多格道具的空闲矩形区域查找（最多 50 次尝试）
+  - `check_collision()` —— 蛇头与道具的碰撞检测（基于坐标包含判断）
+- 当前仅注册 `score_boost`（基础食物），为后续多类型扩展留好接口
 
-**2. 新增 `scenes/game_screen.py` — GameScreen**
-- 输入集成：通过框架 `InputManager` 的 `MOVE_UP/DOWN/LEFT/RIGHT` 动作映射方向
-- 计时驱动：使用 `pygame.time.get_ticks()` 差值计算帧间时间，不依赖外部 clock 传参
-- 食物系统：随机生成于空白网格位置，避开蛇身
-- 碰撞检测：撞墙（越界）与撞自己两种判定
-- 游戏结束：半透明遮罩 + 最终得分 + 按键返回大厅
-- 多层背景加载：`GAME_BG_LAYERS` 列表驱动，缺失图片自动跳过不报错
-- 分数 HUD：左上角实时显示当前得分
+**2. 道具图片渲染**
+- `_load_item_images()` —— 预加载 `assets/images/` 下的道具图片，统一缩放到 `ITEM_RENDER_SIZE = 23px`
+- `_draw_items()` —— 使用预加载图片居中绘制每个道具，图片缺失时使用纯色圆点兜底
 
-**3. 重写 `scenes/lobby_screen.py`**
-- 标题 + 副标题居中排版
-- 开始游戏按钮：`pygame.Rect` 碰撞检测 + 鼠标悬停高亮 + 键盘 Enter/Space 确认
-- 按钮预渲染两套文字（普通/高亮），避免每帧重复渲染
+**3. 统计管理器（`utils/stats_manager.py`）**
+- `StatsManager` 类作为游戏数据的单一数据源，`GameScreen` 写入，未来 UI 模块通过只读接口查询
+- 核心数据：`score`（分数）、`snake_length`（蛇长）、`combo`（连击）、`items_collected`（收集计数）
+- `add_score()` —— 自动应用蛇长倍率（`1.0 + (len - 3) × 0.1`），蛇越长得分越高
+- `on_item_collected()` —— 基于 2 秒窗口的连击管理，超时则重置
+- `get_all_stats()` —— 一次性返回全部数据供结算/存档
 
-**4. 修改 `scenes/registry.py`**
-- 新增 `GameScreen` 导入与注册：`"GAME": GameScreen`
+**4. 游戏场景集成**
+- `GameScreen.__init__()` —— 以 `StatsManager` 替换 `self.score`，新增 `ItemManager` 实例
+- `_reset_game()` —— 重置道具管理器 + 统计管理器，启动计时器
+- `update()` —— 每帧更新道具生成，步进后同步蛇长到统计模块
+- `_game_step()` —— 蛇头碰撞检测改为委托 `ItemManager.check_collision()`
+- `_apply_item_effect()` —— 统一道具效果入口，当前仅加分和统计记录
+- `_draw_score()` —— 显示"得分 + 蛇长"
+- `_draw_game_over()` —— 显示"最终得分 + 最大连击"
 
-**5. 修改 `settings.py` — 游戏常量区块**
-- 网格参数：`CELL_SIZE`(21)、`GRID_WIDTH`(29)、`GRID_HEIGHT`(25)
-- 区域偏移：`MARGIN_LEFT`(自动居中)、`MARGIN_TOP`(146)
-- 蛇初始数据：`SNAKE_INITIAL`、`SNAKE_INITIAL_DIRECTION`
-- 移动间隔：`MOVE_INTERVAL`(150ms)
-- 颜色常量：`SNAKE_COLOR`、`SNAKE_BORDER_COLOR`、`FOOD_COLOR`、`GRID_LINE_COLOR`、`GAME_BG_COLOR`
-- 背景图层列表：`GAME_BG_LAYERS`
+#### 架构对比
 
-**6. 修改 `input_manager.py`**
-- `CONTEXT_ALIAS` 新增 `"LOBBY": "MENU"`，大厅复用菜单导航映射
+| 维度 | 改造前（v0.5.0） | 改造后（v0.6.0） |
+|:---|:---|:---|
+| **食物生成** | `_spawn_food()` 单点随机 | `ItemManager` 计时驱动，支持多类型扩展 |
+| **碰撞检测** | `new_head == self.food` 坐标等值判断 | `ItemManager.check_collision()` 基于区域包含 |
+| **分数管理** | `self.score` 孤立整数 | `StatsManager` 集中管理，自带倍率计算 |
+| **UI 查询** | 无接口，直接读 `self.score` | 只读 getter 接口，UI 模块可注入 `StatsManager` |
+| **图片渲染** | 纯色圆点（`pygame.draw.circle`） | 预加载 `score_boost.png`（23×23px 居中绘制） |
+| **蛇长显示** | 不显示 | HUD 显示"得分 + 长度" |
+| **连击系统** | 无 | 2 秒窗口连击，结算时显示最大连击 |
 
-#### 场景流转
+#### 项目结构变化
+
 ```
-START（开始画面） → CONFIRM → LOBBY（大厅）
-                                ├── 点击"开始游戏" → GAME（贪吃蛇）
-                                │                       ├── 撞墙/撞自己 → 游戏结束遮罩
-                                │                       └── 按任意键 → LOBBY
-                                └── ESC → 退出覆盖层 → 确认退出程序
+GluttonousSnake_pygame-ce/
+├── items/                          # ← 新增包
+│   ├── __init__.py                 # 包导出
+│   ├── item_defs.py                # 道具定义表
+│   ├── item_base.py                # 道具实例基类
+│   └── item_manager.py             # 道具管理器
+├── utils/                          # ← 扩展
+│   ├── __init__.py                 # 导出 StatsManager
+│   └── stats_manager.py            # 新增 — 统计管理器
+├── scenes/
+│   └── game_screen.py              # 修改 — 集成新系统
+└── settings.py                     # 修改 — 新增道具常量
+
+assets/images/
+├── score_boost.png                 # ← 新增 — 基础食物图片
+└── ...
 ```
+
+#### 后续规划
+- [ ] 道具权重系统（动态调整、阶段解锁、安全区）
+- [ ] 多类型道具注册（加速/减速/无敌/大餐等）
+- [ ] 蛇的 buff 系统（时效性效果管理）
+- [ ] 分数 UI 模块（独立 HUD 组件）
+- [ ] 道具拾取音效与视觉反馈
 
 ---
 

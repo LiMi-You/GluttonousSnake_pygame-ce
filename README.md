@@ -3,37 +3,45 @@
 <br><br><br>
 当前版本Ver2.0项目的目录结构
 ```text
-my_pygame_game/
+GluttonousSnake_pygame-ce/
 │
 ├── main.py              # 🚪 游戏入口：只做初始化、主循环、状态切换
 ├── scene_manager.py     # 场景管理器（核心）
 ├── input_manager.py     # 输入中枢（核心）
-├── settings.py          # ⚙️ 配置中心：屏幕大小、颜色、速度、字体路径等（杜绝魔法数字）、仅存纯配置常量
-├── assets/              # 🎨 所有资源（统一放这里，代码里用相对路径加载）
-│   ├── images/          #   .png, .jpg, .gif
-│   │   └── start_bg.png
-│   ├── sounds/          #   .wav, .ogg, .mp3
-│   │   └── start_bgm.png
+├── quit_overlay.py      # 退出确认覆盖层
+├── settings.py          # ⚙️ 配置中心
+├── assets/              # 🎨 所有资源
+│   ├── images/          #   .png
+│   │   ├── score_boost.png
+│   │   ├── start_bg.png
+│   │   └── ...
+│   ├── sounds/          #   .mp3, .wav
 │   └── fonts/           #   .ttf, .otf
-├── scenes/              # 游戏场景资源
+├── items/               # 🎁 道具系统（v0.6.0 新增）
 │   ├── __init__.py
-│   ├── registry.py
-│   ├── base_scene.py
-│   └── start_screen.py
-├── entities/            # 👾 游戏实体：玩家、敌人、子弹、道具等（每个文件一个类）
-│   ├── __init__.py      #   留空，让 Python 知道这是个包
-│   ├── player.py
-│   └── enemy.py
-│
-├── utils/               # 🛠️ 工具函数：碰撞检测、分数计算、资源加载器等
+│   ├── item_defs.py     # 道具定义表
+│   ├── item_base.py     # 道具实例基类
+│   └── item_manager.py  # 道具管理器
+├── scenes/              # 🎬 游戏场景
 │   ├── __init__.py
+│   ├── registry.py      # 场景工厂注册表
+│   ├── base_scene.py    # 场景基类
+│   ├── start_screen.py  # 开始页
+│   ├── lobby_screen.py  # 大厅页
+│   └── game_screen.py   # 游戏主场景
+├── entities/            # 👾 游戏实体
+│   ├── __init__.py
+│   ├── player.py        # 贪吃蛇
+│   └── enemy.py         # （预留）
+├── utils/               # 🛠️ 工具模块
+│   ├── __init__.py
+│   ├── stats_manager.py # 统计管理器（v0.6.0 新增）
 │   └── helpers.py
-│
 ├── docs/              
-│   ├── CHANGELOG_OLD.md
-│   └── CHANGELOG.md
+│   ├── CHANGELOG.md
+│   └── CHANGELOG_OLD.md
 │
-└── README.md            # 📝 项目说明 & 开发笔记
+└── README.md            # 📝 项目说明
 ```
 
 [项目Ver4.0版本更新说明](docs/CHANGELOG.md)

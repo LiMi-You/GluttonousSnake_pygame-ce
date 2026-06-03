@@ -40,9 +40,8 @@ class InputManager:
 
         # 上下文按键别名映射
         self.CONTEXT_ALIAS = {
-            "START": "MENU",
-            "LOBBY": "MENU",
-            "GAME": "GAME",
+            "START": "MENU", 
+            "GAME": "GAME", 
             "PAUSE": "MENU"
             } 
 

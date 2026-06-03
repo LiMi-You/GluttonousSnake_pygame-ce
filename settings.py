@@ -44,6 +44,12 @@ SNAKE_BORDER_WIDTH = 2             # 边框线宽
 # 食物颜色
 FOOD_COLOR = (255, 50, 50)         # 食物填充色（红色）
 
+# ==================== 道具系统参数 ====================
+ITEM_RENDER_SIZE = 25              # 道具渲染尺寸（像素），略大于 CELL_SIZE(21)
+ITEM_SPAWN_INTERVAL = 2000         # 生成间隔（毫秒）
+ITEM_MAX_ON_SCREEN = 8             # 场上最多同时存在的道具数
+ITEM_BASE_SPAWN_COUNT = 3          # 游戏开始时初始生成数量
+
 # 网格线颜色
 GRID_LINE_COLOR = (54, 188, 217)   # 网格线颜色（青蓝）
 GRID_LINE_WIDTH = 2                # 网格线宽

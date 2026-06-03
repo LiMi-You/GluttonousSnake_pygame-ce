@@ -2,10 +2,9 @@
 scenes/game_screen.py — 贪吃蛇游戏主场景
 
 集成框架输入系统（InputManager）与蛇实体（Snake），
-实现完整的贪吃蛇游戏循环：移动、食物、碰撞、渲染。
+实现完整的贪吃蛇游戏循环：移动、道具、碰撞、渲染。
 """
 import pygame
-import random
 from typing import Optional
 
 from settings import (
@@ -13,11 +12,13 @@ from settings import (
     CELL_SIZE, GRID_WIDTH, GRID_HEIGHT,
     MARGIN_LEFT, MARGIN_TOP,
     MOVE_INTERVAL,
-    FOOD_COLOR, GRID_LINE_COLOR, GRID_LINE_WIDTH,
+    ITEM_RENDER_SIZE, GRID_LINE_COLOR, GRID_LINE_WIDTH,
     GAME_BG_COLOR, GAME_BG_LAYERS,
 )
 from scenes.base_scene import Scene
 from entities.player import Snake
+from items import ItemManager, ItemInstance
+from utils import StatsManager
 
 
 class GameScreen(Scene):
@@ -28,8 +29,8 @@ class GameScreen(Scene):
 
         # ── 游戏实体 ──
         self.snake = Snake()
-        self.food: tuple[int, int] = (15, 7)  # 食物网格坐标
-        self.score: int = 0
+        self.item_manager = ItemManager()
+        self.stats = StatsManager()
 
         # ── 移动计时器（使用 get_ticks 差值，不依赖外部传 delta）──
         self._last_tick: int = 0          # 上一帧的绝对毫秒时间戳
@@ -48,6 +49,10 @@ class GameScreen(Scene):
         self.bg_layers: list[pygame.Surface] = []
         self._load_backgrounds()
 
+        # ── 预加载道具图片 ──
+        self._item_images: dict[str, pygame.Surface | None] = {}
+        self._load_item_images()
+
     # ── 资源加载 ──
 
     def _load_backgrounds(self):
@@ -59,6 +64,19 @@ class GameScreen(Scene):
                 self.bg_layers.append(img)
             except FileNotFoundError:
                 print(f"⚠️ 背景图缺失: assets/images/{filename}，跳过")
+
+    def _load_item_images(self):
+        """预加载道具图片，统一缩放到 ITEM_RENDER_SIZE"""
+        from items.item_defs import ITEM_DEFS
+        for item_id, defn in ITEM_DEFS.items():
+            if defn.image_key:
+                try:
+                    img = pygame.image.load(f"assets/images/{defn.image_key}").convert_alpha()
+                    img = pygame.transform.scale(img, (ITEM_RENDER_SIZE, ITEM_RENDER_SIZE))
+                    self._item_images[item_id] = img
+                except FileNotFoundError:
+                    print(f"⚠️ 道具图片缺失: assets/images/{defn.image_key}，使用纯色替代")
+                    self._item_images[item_id] = None
 
     # ── 场景生命周期 ──
 
@@ -74,27 +92,18 @@ class GameScreen(Scene):
     def _reset_game(self):
         """重置游戏到初始状态"""
         self.snake = Snake()
-        self.food = self._spawn_food()
-        self.score = 0
+        self.item_manager.reset()
+        self.stats.reset()
+        self.stats.start_timer()
         self._last_tick = pygame.time.get_ticks()
         self._move_accumulator = 0
         self.game_over_flag = False
         self.game_over_start_tick = 0
 
-    # ── 食物生成 ──
-
-    def _spawn_food(self) -> tuple[int, int]:
-        """在空白网格位置随机生成食物"""
-        while True:
-            fx = random.randint(0, GRID_WIDTH - 1)
-            fy = random.randint(0, GRID_HEIGHT - 1)
-            if (fx, fy) not in self.snake.body:
-                return (fx, fy)
-
     # ── 输入处理 ──
 
     def _map_action_to_direction(self, action: str) -> tuple[int, int] | None:
-        """将框架标准化动作映射为方向向量"""
+        """将框架为方标准化动作映射向向量"""
         mapping = {
             "MOVE_UP":    (0, -1),
             "MOVE_DOWN":  (0, 1),
@@ -151,6 +160,9 @@ class GameScreen(Scene):
         if self.game_over_flag:
             return
 
+        # ── 更新道具管理器（生成新道具）──
+        self.item_manager.update(self.snake.body, delta_ms)
+
         # 正常游戏：累加时间并驱动步进
         self._move_accumulator += delta_ms
         while self._move_accumulator >= MOVE_INTERVAL:
@@ -159,29 +171,44 @@ class GameScreen(Scene):
             if self.game_over_flag:
                 break  # 游戏结束则停止步进
 
+        # ── 同步蛇长到统计模块 ──
+        self.stats.set_snake_length(len(self.snake.body))
+
     def _game_step(self):
-        """执行一步游戏逻辑：移动蛇 → 检测食物 → 检测碰撞"""
-        # 1. 移动蛇
-        new_head = self.snake.move()
+        """执行一步游戏逻辑：预判碰撞 → 移动蛇 → 检测道具"""
+        # 0. 预计算新蛇头位置（不移动，仅预测）
+        head = self.snake.body[0]
+        dx, dy = self.snake.next_direction
+        new_head = (head[0] + dx, head[1] + dy)
 
-        # 2. 检测是否吃到食物
-        if new_head == self.food:
-            self.snake.just_ate = True
-            self.score += 1
-            self.food = self._spawn_food()
-        else:
-            self.snake.just_ate = False
-
-        # 3. 撞墙检测
+        # 1. 撞墙检测（移动前）
         if (new_head[0] < 0 or new_head[0] >= GRID_WIDTH or
                 new_head[1] < 0 or new_head[1] >= GRID_HEIGHT):
             self._trigger_game_over()
             return
 
-        # 4. 撞自己检测
-        if self.snake.check_self_collision():
+        # 2. 撞自身检测（移动前，预判）
+        check_body = self.snake.body[1:] if self.snake.just_ate else self.snake.body[1:-1]
+        if new_head in check_body:
             self._trigger_game_over()
             return
+
+        # 3. 移动蛇
+        new_head = self.snake.move()
+
+        # 4. 检测是否碰撞到道具
+        collected = self.item_manager.check_collision(new_head)
+        if collected:
+            self._apply_item_effect(collected)
+        else:
+            self.snake.just_ate = False
+
+    def _apply_item_effect(self, item: ItemInstance):
+        """应用道具效果"""
+        self.stats.add_score(item.defn.score_value)
+        self.stats.on_item_collected(item.item_id)
+        self.snake.just_ate = True
+        self.item_manager.remove_item(item)
 
     def _trigger_game_over(self):
         """触发游戏结束"""
@@ -202,9 +229,9 @@ class GameScreen(Scene):
         # 2. 网格线
         self._draw_grid(screen)
 
-        # 3. 食物
+        # 3. 道具
         if not self.game_over_flag:
-            self._draw_food(screen)
+            self._draw_items(screen)
 
         # 4. 蛇
         self.snake.draw(screen)
@@ -231,16 +258,29 @@ class GameScreen(Scene):
                     width=GRID_LINE_WIDTH, border_radius=4,
                 )
 
-    def _draw_food(self, screen: pygame.Surface):
-        """绘制食物（红色圆点）"""
-        px, py = self.snake.grid_to_pixel(self.food[0], self.food[1])
-        center = (px + CELL_SIZE // 2 + 2, py + CELL_SIZE // 2 + 2)
-        pygame.draw.circle(screen, FOOD_COLOR, center, CELL_SIZE // 2 - 2)
+    def _draw_items(self, screen: pygame.Surface):
+        """绘制场上所有道具（使用预加载的图片）"""
+        for item in self.item_manager.active_items:
+            # 计算网格中心像素坐标
+            px, py = self.snake.grid_to_pixel(item.grid_x, item.grid_y)
+            cx = px + CELL_SIZE // 2
+            cy = py + CELL_SIZE // 2
+
+            img = self._item_images.get(item.item_id)
+            if img:
+                # 有图片：居中绘制，尺寸为 ITEM_RENDER_SIZE
+                rect = img.get_rect(center=(cx, cy))
+                screen.blit(img, rect)
+            else:
+                # 无图片时用纯色圆点兜底
+                color = item.defn.color
+                pygame.draw.circle(screen, color, (cx, cy), ITEM_RENDER_SIZE // 2)
 
     def _draw_score(self, screen: pygame.Surface):
-        """绘制当前分数"""
+        """绘制当前分数和蛇长"""
         score_text = self.score_font.render(
-            f"当前得分：{self.score}", True, (255, 255, 255),
+            f"得分：{self.stats.get_score()}  长度：{self.stats.get_snake_length()}",
+            True, (255, 255, 255),
         )
         screen.blit(score_text, (MARGIN_LEFT, MARGIN_TOP - 36))
 
@@ -258,8 +298,9 @@ class GameScreen(Scene):
         screen.blit(go_text, go_rect)
 
         # 提示文字
+        stats = self.stats.get_all_stats()
         hint_text = self.score_font.render(
-            f"最终得分：{self.score} — 按任意键返回大厅",
+            f"最终得分：{stats['score']}  最大连击：{stats['max_combo']} — 按任意键返回大厅",
             True, (200, 200, 200),
         )
         hint_rect = hint_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30))
