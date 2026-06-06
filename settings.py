@@ -47,8 +47,16 @@ FOOD_COLOR = (255, 50, 50)         # 食物填充色（红色）
 # ==================== 道具系统参数 ====================
 ITEM_RENDER_SIZE = 25              # 道具渲染尺寸（像素），略大于 CELL_SIZE(21)
 ITEM_SPAWN_INTERVAL = 2000         # 生成间隔（毫秒）
-ITEM_MAX_ON_SCREEN = 8             # 场上最多同时存在的道具数
+ITEM_MAX_ON_SCREEN = 100             # 场上最多同时存在的道具数
 ITEM_BASE_SPAWN_COUNT = 3          # 游戏开始时初始生成数量
+
+# ==================== 难度阶段阈值 ====================
+PHASE_EARLY_MAX_SCORE = 100000     # 前期 → 中期的分数门槛
+PHASE_LATE_MIN_LENGTH = 20         # 中期 → 后期的蛇长门槛
+
+# ==================== 可移动道具参数 ====================
+MOVE_ITEM_BASE_SPEED = 0.08        # 移动速度单位（格/帧），move_speed=1 时每帧移动 0.08 格 ≈ 42px/s @25fps
+# 速度公式: 实际速度(格/帧) = move_speed × MOVE_ITEM_BASE_SPEED
 
 # 网格线颜色
 GRID_LINE_COLOR = (54, 188, 217)   # 网格线颜色（青蓝）

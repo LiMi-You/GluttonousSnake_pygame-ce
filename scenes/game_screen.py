@@ -160,8 +160,12 @@ class GameScreen(Scene):
         if self.game_over_flag:
             return
 
-        # ── 更新道具管理器（生成新道具）──
-        self.item_manager.update(self.snake.body, delta_ms)
+        # ── 更新道具管理器（生成新道具，传入游戏状态供权重引擎使用）──
+        self.item_manager.update(
+            self.snake.body, delta_ms,
+            score=self.stats.get_score(),
+            snake_length=len(self.snake.body),
+        )
 
         # 正常游戏：累加时间并驱动步进
         self._move_accumulator += delta_ms
@@ -259,20 +263,19 @@ class GameScreen(Scene):
                 )
 
     def _draw_items(self, screen: pygame.Surface):
-        """绘制场上所有道具（使用预加载的图片）"""
+        """绘制场上所有道具（使用预加载的图片，移动道具平滑渲染）"""
         for item in self.item_manager.active_items:
-            # 计算网格中心像素坐标
-            px, py = self.snake.grid_to_pixel(item.grid_x, item.grid_y)
+            # 使用小数格坐标 (fx, fy) 计算平滑像素位置
+            px = MARGIN_LEFT + item.fx * CELL_SIZE - CELL_SIZE // 2
+            py = MARGIN_TOP + item.fy * CELL_SIZE - CELL_SIZE // 2
             cx = px + CELL_SIZE // 2
             cy = py + CELL_SIZE // 2
 
             img = self._item_images.get(item.item_id)
             if img:
-                # 有图片：居中绘制，尺寸为 ITEM_RENDER_SIZE
                 rect = img.get_rect(center=(cx, cy))
                 screen.blit(img, rect)
             else:
-                # 无图片时用纯色圆点兜底
                 color = item.defn.color
                 pygame.draw.circle(screen, color, (cx, cy), ITEM_RENDER_SIZE // 2)
 

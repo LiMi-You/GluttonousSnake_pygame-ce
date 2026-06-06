@@ -8,6 +8,120 @@
 
 ---
 
+## [v0.7.0] - 2026-06-07
+
+### ✨ Added — 动态权重系统 & 可移动道具子系统
+
+#### 涉及文件
+
+| 文件 | 操作 |
+|:---|:---|
+| `items/difficulty_phases.py` | **新增** — 难度阶段系统（`DifficultyPhase` 数据类 + 3 阶段配置表 + 查询函数） |
+| `items/weight_calculator.py` | **新增** — 动态权重计算引擎（3 个修正因子 + 轮盘赌选择） |
+| `utils/helpers.py` | **新建** — 12 方向向量表（钟表方向）+ 随机方向选取 + 范围检测 |
+| `items/item_defs.py` | **修改** — 增加分类标签（5 类）、移动字段（4 个）、注册 `LuckyPatrolFoot` |
+| `items/item_base.py` | **重构** — `grid_x`/`grid_y` 改为属性；新增 `fx`/`fy` 小数坐标层 + 移动状态 |
+| `items/item_manager.py` | **扩展** — 权重驱动生成、可移动道具更新、全场清理、生成边界约束 |
+| `scenes/game_screen.py` | **修改** — 传递 `score`/`snake_length` 给权重引擎；道具平滑渲染 |
+| `settings.py` | **修改** — 新增阶段阈值常量 + 移动速度常量 |
+
+#### 改动详情
+
+**1. 道具分类系统（`item_defs.py`）**
+- `ItemDef` 新增 `category` 字段，5 种分类常量：`CAT_BASIC`、`CAT_LUCKY`、`CAT_BUFF`、`CAT_DEBUFF`、`CAT_OBSTACLE`
+- 注册第二个道具类型 `lucky_patrol_food`（LuckyPatrolFoot）：
+  - 分类 `CAT_LUCKY`，占格 1×1，权重 15，同时上限 3，分值 5000
+  - 移动配置：`move_range=4`（4×4 格圆形区域），`move_speed=1`，12 方向随机转向
+
+**2. 难度阶段系统（`items/difficulty_phases.py`）**
+- `DifficultyPhase` 数据类：`min_score`、`min_length`、`allowed_categories`、`weight_multipliers`
+- 3 阶段配置（叠加模式——所有满足条件的阶段同时生效）：
+
+| 阶段 | 条件 | 允许分类 | 倍率调整 |
+|:---|:---|:---|:---|
+| 前期 | 分数 < 100k | basic + lucky | lucky 由 score_modifier 压制到 0.1× |
+| 中期 | 分数 ≥ 100k | 全部 5 类 | 无额外倍率 |
+| 后期 | 蛇长 ≥ 20 | 全部 5 类 | obstacle ×1.5, debuff ×1.3 |
+
+- 查询函数：`get_active_phases()`、`get_allowed_categories()`、`merge_multipliers()`、`get_allowed_item_ids()`
+
+**3. 动态权重引擎（`items/weight_calculator.py`）**
+- `build_weight_table()` — 根据当前游戏状态实时计算每个道具的有效权重
+- 3 个修正因子：
+  - **场上数量压制** `calc_screen_count_modifier()`：`1 − (current/max)²`（平方衰减）
+  - **蛇长因子** `calc_length_modifier()`：长蛇 → 障碍物/减益权重↑，幸运类权重↓
+  - **分数因子** `calc_score_modifier()`：100k 分前稀有类 ×0.1，之后线性增长至 ×2.0
+- `pick_item_by_weight()` — 轮盘赌算法加权随机选择
+- `build_weight_table` 接受 `item_defs` 显式参数（依赖可追溯）
+
+**4. 移动道具子系统**
+- **12 方向向量表**（`utils/helpers.py`）：360° 等分 12 份，预计算 12 个单位向量
+- `get_random_direction()` / `get_new_direction()` — 随机/非重复方向选取
+- `is_within_range()` — 圆形区域范围检测
+- **`ItemInstance` 重构**（`items/item_base.py`）：
+  - `fx`/`fy`（小数格坐标）作为位置主源，`grid_x`/`grid_y` 改为实时计算属性
+  - 新增 `move_dir`、`move_dir_idx`、`spawn_origin` 移动状态字段
+- **`ItemManager._update_moving_items()`**（`item_manager.py`）：
+  - 每帧独立更新（不受蛇步频限制），支持 `dt_ms` 帧率归一化
+  - 范围约束：超出 `move_range` → 随机换方向 + 钳制回边界
+  - 全场反弹：已预置 `move_bounce` 逻辑（供未来 `UniqueBouncingLuckyProp` 使用）
+- **平滑渲染**（`game_screen.py`）：`_draw_items()` 使用 `fx`/`fy` 计算像素位置，移动道具不再一跳一格
+
+**5. 全场清理接口**
+- `ItemManager.clear_all_items(exclude_ids)` — 支持选择性保留的道具清场（供 LuckyClearBlock 等使用）
+
+**6. 生成边界越界修复**
+- `_find_valid_position()` 新增 `move_range` 参数：生成时可移动道具的位置被约束在安全区域内，确保圆形移动范围完全在地图内
+- `move_range=4`（half=2，整数无小数）→ 有效生成区域 25×21（地图 29×25）
+
+#### 架构：权重驱动的道具生成流程
+
+```
+GameScreen.update()
+  └─ ItemManager.update(score, snake_length)
+       ├─ _update_moving_items(dt_ms)     ← 可移动道具独立运动
+       └─ _spawn_weighted(score, length)  ← 权重驱动生成
+            ├─ get_active_phases()        → 确定当前阶段
+            ├─ get_allowed_item_ids()     → 从阶段获取允许的道具列表
+            ├─ build_weight_table()       → 动态权重计算
+            │    ├─ base_weight
+            │    ├─ calc_screen_count_modifier()
+            │    ├─ calc_length_modifier()
+            │    ├─ calc_score_modifier()
+            │    └─ phase_multipliers
+            └─ pick_item_by_weight()      → 轮盘赌选择
+                 └─ _spawn_one()          → 生成（含边界约束）
+```
+
+#### 项目结构变化
+
+```
+GluttonousSnake_pygame-ce/
+├── items/
+│   ├── __init__.py
+│   ├── item_defs.py                    # 修改 — 分类标签 + 移动字段 + LuckyPatrolFoot
+│   ├── item_base.py                    # 重构 — 小数坐标层 + 移动状态
+│   ├── item_manager.py                 # 扩展 — 权重引擎 + 移动更新 + 清场 + 边界约束
+│   ├── difficulty_phases.py            # ← 新增 — 难度阶段系统
+│   └── weight_calculator.py            # ← 新增 — 动态权重计算引擎
+├── utils/
+│   ├── __init__.py
+│   ├── stats_manager.py
+│   └── helpers.py                      # ← 新建 — 12方向向量 + 移动工具函数
+├── scenes/
+│   └── game_screen.py                  # 修改 — 传递游戏状态 + 平滑渲染
+└── settings.py                         # 修改 — 新增阶段阈值 + 移动速度常量
+```
+
+#### 后续规划
+- [x] 道具权重系统（动态调整、阶段解锁、安全区）
+- [ ] 多类型道具功能实现（加速/减速/障碍物/清场等）
+- [ ] 蛇的 Buff 系统（时效性效果管理，为 LuckyClearBlock 准备）
+- [ ] NPC 系统集成（NPC 死亡掉落基础食物）
+- [ ] 道具拾取音效与视觉反馈
+
+---
+
 ## [v0.6.0] - 2026-06-03
 
 ### ✨ Added — 道具系统基础设施 & 统计管理器
