@@ -78,12 +78,14 @@ class ItemManager:
 
     # ── 生成逻辑 ──
 
-    def _spawn_one(self, item_id: str, forced_pos: Optional[tuple[int, int]] = None):
+    def _spawn_one(self, item_id: str, forced_pos: Optional[tuple[int, int]] = None,
+                   occupied_cells: Optional[set[tuple[int, int]]] = None):
         """
         生成一个指定类型的道具（强制生成，绕过权重系统）。
         
         用于 NPC 死亡掉落等事件驱动场景。
         forced_pos: 指定生成位置（None 则自动找空闲位）
+        occupied_cells: 额外不可用的格子集合（用于NPC掉落时避免与蛇身重叠）
         """
         defn = get_item_def(item_id)
 
@@ -94,6 +96,29 @@ class ItemManager:
 
         if forced_pos is not None:
             gx, gy = forced_pos
+            # 验证指定位置是否合法（在界内且未被占据）
+            if not (0 <= gx < GRID_WIDTH and 0 <= gy < GRID_HEIGHT):
+                return
+            if occupied_cells and (gx, gy) in occupied_cells:
+                # 指定位置被占，尝试在附近找一个空闲位
+                found = False
+                for radius in range(1, 4):
+                    for dx in range(-radius, radius + 1):
+                        for dy in range(-radius, radius + 1):
+                            nx, ny = gx + dx, gy + dy
+                            if not (0 <= nx < GRID_WIDTH and 0 <= ny < GRID_HEIGHT):
+                                continue
+                            if occupied_cells and (nx, ny) in occupied_cells:
+                                continue
+                            gx, gy = nx, ny
+                            found = True
+                            break
+                        if found:
+                            break
+                    if found:
+                        break
+                if not found:
+                    return  # 附近没有空闲位，放弃生成
         else:
             # 找空闲位置（可移动道具需额外保证移动范围不越界）
             mr = defn.move_range if defn.is_moving else 0

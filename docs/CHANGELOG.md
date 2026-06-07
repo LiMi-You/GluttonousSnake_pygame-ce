@@ -8,6 +8,164 @@
 
 ---
 
+## [v0.8.0] - 2026-06-07
+
+### ✨ Added — NPC蛇子系统（Phase 1-6 完整交付）
+
+#### 涉及文件
+
+| 文件 | 操作 |
+|:---|:---|
+| `entities/npc/__init__.py` | **新增** — NPC子系统包导出 |
+| `entities/npc/npc_types.py` | **新增** — NPC类型定义（`NPCTypeDef`数据类 + 5种NPC注册） |
+| `entities/npc/npc_base.py` | **新增** — NPCSnake实体基类（渐进式出生 + 生命周期状态机） |
+| `entities/npc/spawn_manager.py` | **新增** — 出生管理器（安全区域选址 + 渐进式创建） |
+| `entities/npc/collision_manager.py` | **新增** — 碰撞管理器（全局占据图 + 碰撞预判） |
+| `entities/npc/npc_manager.py` | **新增** — NPC管理器总控（生命周期 + 死亡掉落 + GameScreen集成入口） |
+| `entities/npc/navigation/__init__.py` | **新增** — 导航子系统 + 策略工厂 `create_strategy()` |
+| `entities/npc/navigation/base_strategy.py` | **新增** — `NavContext`上下文 + `NavigationStrategy`抽象接口 |
+| `entities/npc/navigation/obstacle_avoidance.py` | **新增** — 共享障碍规避组件（方向过滤/优先级排序/前瞻检测） |
+| `entities/npc/navigation/random_walk.py` | **新增** — `RandomWalkStrategy`（StandardSnake） |
+| `entities/npc/navigation/greedy_item.py` | **新增** — `GreedyItemStrategy`（ForagingSnake） |
+| `entities/npc/navigation/chase_player.py` | **新增** — `ChasePlayerStrategy` BFS追击（HunterSnake） |
+| `entities/npc/navigation/wander.py` | **新增** — `WanderStrategy` 大范围游走（MythicSnake） |
+| `entities/npc/navigation/hybrid.py` | **新增** — `HybridStrategy` 混合模式（LootSnake） |
+| `entities/__init__.py` | **修改** — 导出 `Snake` |
+| `scenes/game_screen.py` | **修改** — 集成 `NPCManager`（出生/更新/碰撞/渲染） |
+| `items/item_defs.py` | **修改** — `score_boost.max_on_screen` 1→30（支持NPC掉落） |
+| `items/item_manager.py` | **修改** — `_spawn_one()` 新增 `occupied_cells` 参数 + 掉落位置验证 |
+
+#### NPC蛇类型一览
+
+| 类型ID | 名称 | 颜色 | 长度 | 掉落 | 拾取道具 | 导航策略 |
+|:---|:---|:---|:---|:---|:---|:---|
+| `standard` | 标准蛇 | `#7148ff` | 3-6 | 无 | 否 | RandomWalk |
+| `foraging` | 觅食蛇 | `#fe22ff` | 15 | 3个 | 是(60%) | GreedyItem |
+| `loot` | 战利品蛇 | `#22233e` | 25-40 | 6个(混稀有) | 是(15%) | Hybrid |
+| `mythic` | 神话蛇 | `#bafffe` | 35-50 | 10个(混稀有) | 否 | Wander |
+| `hunter` | 猎手蛇 | `#ff1c50` | 25 | 5个 | 否 | ChasePlayer(BFS) |
+
+#### 四大基础能力
+
+**1. 出生管理 (`SpawnManager`)**
+- **安全区域选址**：200次随机采样，验证候选点满足：
+  - 未被玩家/NPC/障碍物占据
+  - 至少2个方向有2格畅通空间
+  - 周围区域（半径≈蛇长/2+3）占用率<35%
+- **智能方向选择**：按连续空闲格数+远离玩家方向评分
+- **渐进式出生**：`NPCSnake`初始仅含蛇头（`body=[head_pos]`），每步移动增长1格，直到达到目标长度后自动切换为`ACTIVE`
+- 状态机：`UNFOLDING → ACTIVE → DEAD`
+
+**2. 移动障碍规避 (`ObstacleAvoidance`)**
+- `filter_safe_directions()` — 过滤掉前方有障碍的方向（委托CollisionManager）
+- `pick_best_direction()` — 优先级：偏好方向 > 当前方向 > 随机 > 反向
+- `lookahead_clear()` — 前瞻检测（看前方N格是否畅通）
+- `direction_toward()` — 计算从head指向target的偏好方向
+
+**3. 路径导航规划 (5种可插拔策略)**
+- `RandomWalkStrategy` — 20%随机转向 + 保持方向 + 障碍规避
+- `GreedyItemStrategy` — 曼哈顿距离12格内扫描最近道具，贪心接近
+- `ChasePlayerStrategy` — BFS最短路径寻路（最大深度40格），每3步重算
+- `WanderStrategy` — 低转向概率(8%) + 前瞻3格提前偏转
+- `HybridStrategy` — 15%概率切换贪心模式，持续5-12步后恢复随机
+
+**4. 碰撞管理 (`CollisionManager`)**
+- 每帧重建全局占据图（player + npc:xxx + obstacle）
+- `check_move()` — 单步碰撞预判，返回`CollisionType`枚举（SAFE/HIT_WALL/HIT_SELF/HIT_PLAYER_BODY/HIT_NPC_BODY）
+- `get_safe_directions()` — 返回所有安全移动方向
+- 玩家碰撞：`GameScreen._game_step()`中预判玩家新蛇头是否进入NPC身体
+
+#### 出生配置
+
+| 参数 | 值 |
+|:---|:---|
+| 初始出生数量 | 2只（仅StandardSnake） |
+| 周期性出生间隔 | 8-15秒随机 |
+| 场上最大NPC数 | 8只 |
+| 周期性出生权重 | standard:40, foraging:25, loot:15, hunter:15, mythic:5 |
+
+#### 死亡掉落（Phase 6 完整交付）
+
+- **掉落条件**：`has_drops=False`的NPC（StandardSnake）不掉落，其余按 `drop_count` 配置掉落
+- **掉落类型混合**：
+  - 低掉落量（≤5，ForagingSnake/HunterSnake）：全部掉落 `score_boost`
+  - 高掉落量（≥6，LootSnake/MythicSnake）：每隔1个混入 `lucky_patrol_food`（稀有移动道具）
+- **掉落位置**：沿蛇身均匀分布（循环取模），自动去重避免同一格重复掉落
+- **边界安全**：仅掉落界内位置（防御性过滤），掉落位置冲突时自动搜索附近空闲格
+- **上限尊重**：`lucky_patrol_food.max_on_screen=3` 达到上限后自动跳过
+- `score_boost.max_on_screen` 由 1→30 以支持大量掉落
+
+#### 架构：NPC子系统模块关系
+
+```
+GameScreen
+  └─ NPCManager（总控）
+       ├─ SpawnManager        ← 出生管理
+       │    └─ NPCSnake       ← 实体（UNFOLDING→ACTIVE→DEAD）
+       ├─ CollisionManager    ← 每帧占据图 + 碰撞预判
+       │    ├─ Player body
+       │    └─ NPC bodies
+       ├─ NavigationSystem    ← AI决策
+       │    ├─ RandomWalkStrategy   (StandardSnake)
+       │    ├─ GreedyItemStrategy   (ForagingSnake)
+       │    ├─ ChasePlayerStrategy  (HunterSnake, BFS)
+       │    ├─ WanderStrategy       (MythicSnake)
+       │    └─ HybridStrategy       (LootSnake)
+       │         └─ ObstacleAvoidance（共享组件）
+       ├─ ItemManager         ← 道具交互（拾取/掉落）
+       └─ 死亡掉落             ← _handle_death_drops()
+```
+
+#### 帧更新流程
+
+```
+NPCManager.update(player_body, items, delta_ms)
+  1. CollisionManager.rebuild()        ← 重建占据图
+  2. 周期性出生计时器                   ← 8-15s间隔
+  3. for each NPC:
+       accumulate delta_ms
+       while accumulator >= move_interval:
+         a. strategy.next_direction()  ← AI决策
+         b. collision_mgr.check_move() ← 碰撞预判
+         c. if SAFE: npc.move()       ← 执行移动
+         d. check_npc_item_pickup()   ← 拾取道具(可选)
+         e. if COLLISION: npc.kill()  ← 标记死亡
+  4. _cleanup_dead() → _handle_death_drops() ← 清理+掉落
+```
+
+#### 项目结构变化
+
+```
+GluttonousSnake_pygame-ce/
+├── entities/
+│   ├── __init__.py              # 修改 — 导出 Snake
+│   ├── player.py                # 玩家蛇（原有，不变）
+│   ├── enemy.py                 # （保留，已被 npc/ 替代）
+│   └── npc/                     # ← 新增包
+│       ├── __init__.py           # 包导出
+│       ├── npc_types.py          # NPC类型定义 + 枚举
+│       ├── npc_base.py           # NPCSnake实体基类
+│       ├── spawn_manager.py      # 出生管理器
+│       ├── collision_manager.py  # 碰撞管理器
+│       ├── npc_manager.py        # NPC管理器总控
+│       └── navigation/           # ← 导航子系统
+│           ├── __init__.py
+│           ├── base_strategy.py
+│           ├── obstacle_avoidance.py
+│           ├── random_walk.py
+│           ├── greedy_item.py
+│           ├── chase_player.py
+│           ├── wander.py
+│           └── hybrid.py
+├── items/
+│   ├── item_defs.py             # 修改 — score_boost max_on_screen 1→30
+│   └── item_manager.py          # 修改 — _spawn_one 支持位置验证
+└── scenes/
+    └── game_screen.py           # 修改 — 集成 NPCManager
+```
+
+---
+
 ## [v0.7.0] - 2026-06-07
 
 ### ✨ Added — 动态权重系统 & 可移动道具子系统
@@ -117,7 +275,7 @@ GluttonousSnake_pygame-ce/
 - [x] 道具权重系统（动态调整、阶段解锁、安全区）
 - [ ] 多类型道具功能实现（加速/减速/障碍物/清场等）
 - [ ] 蛇的 Buff 系统（时效性效果管理，为 LuckyClearBlock 准备）
-- [ ] NPC 系统集成（NPC 死亡掉落基础食物）
+- [x] NPC 系统集成（NPC 死亡掉落基础食物） → 见 v0.8.0
 - [ ] 道具拾取音效与视觉反馈
 
 ---

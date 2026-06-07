@@ -17,6 +17,7 @@ from settings import (
 )
 from scenes.base_scene import Scene
 from entities.player import Snake
+from entities.npc import NPCManager
 from items import ItemManager, ItemInstance
 from utils import StatsManager
 
@@ -31,6 +32,7 @@ class GameScreen(Scene):
         self.snake = Snake()
         self.item_manager = ItemManager()
         self.stats = StatsManager()
+        self.npc_manager = NPCManager(item_manager=self.item_manager)
 
         # ── 移动计时器（使用 get_ticks 差值，不依赖外部传 delta）──
         self._last_tick: int = 0          # 上一帧的绝对毫秒时间戳
@@ -99,6 +101,9 @@ class GameScreen(Scene):
         self._move_accumulator = 0
         self.game_over_flag = False
         self.game_over_start_tick = 0
+        # ── NPC系统 ──
+        self.npc_manager.reset()
+        self.npc_manager.init_spawn(self.snake.body)
 
     # ── 输入处理 ──
 
@@ -167,6 +172,13 @@ class GameScreen(Scene):
             snake_length=len(self.snake.body),
         )
 
+        # ── 更新NPC管理器（AI决策 + 移动 + 碰撞）──
+        self.npc_manager.update(
+            self.snake.body,
+            self.item_manager.active_items,
+            delta_ms,
+        )
+
         # 正常游戏：累加时间并驱动步进
         self._move_accumulator += delta_ms
         while self._move_accumulator >= MOVE_INTERVAL:
@@ -197,10 +209,16 @@ class GameScreen(Scene):
             self._trigger_game_over()
             return
 
-        # 3. 移动蛇
+        # 3. 撞NPC检测（移动前，预判）
+        for npc in self.npc_manager.npcs:
+            if npc.is_alive and new_head in npc.body:
+                self._trigger_game_over()
+                return
+
+        # 4. 移动蛇
         new_head = self.snake.move()
 
-        # 4. 检测是否碰撞到道具
+        # 5. 检测是否碰撞到道具
         collected = self.item_manager.check_collision(new_head)
         if collected:
             self._apply_item_effect(collected)
@@ -240,7 +258,10 @@ class GameScreen(Scene):
         # 4. 蛇
         self.snake.draw(screen)
 
-        # 5. 分数
+        # 5. NPC蛇
+        self.npc_manager.draw(screen)
+
+        # 6. 分数
         self._draw_score(screen)
 
         # 6. 游戏结束提示
@@ -280,9 +301,10 @@ class GameScreen(Scene):
                 pygame.draw.circle(screen, color, (cx, cy), ITEM_RENDER_SIZE // 2)
 
     def _draw_score(self, screen: pygame.Surface):
-        """绘制当前分数和蛇长"""
+        """绘制当前分数、蛇长和NPC数量"""
+        npc_count = self.npc_manager.alive_count
         score_text = self.score_font.render(
-            f"得分：{self.stats.get_score()}  长度：{self.stats.get_snake_length()}",
+            f"得分：{self.stats.get_score()}  长度：{self.stats.get_snake_length()}  NPC：{npc_count}",
             True, (255, 255, 255),
         )
         screen.blit(score_text, (MARGIN_LEFT, MARGIN_TOP - 36))

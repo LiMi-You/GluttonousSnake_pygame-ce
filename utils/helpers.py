@@ -6,14 +6,14 @@ utils/helpers.py — 通用工具函数
 import math
 import random
 
-# ── 12 方向向量表（钟表方向）─────────────────────────
-# 360° 等分 12 份，每份 30°
+# ── 8 方向向量表（钟表方向）─────────────────────────
+# 360° 等分 8 份，每份 45°
 # 索引  0 → 0°(右),  3 → 90°(下),  6 → 180°(左),  9 → 270°(上)
 # 注意: pygame 坐标系 y 轴向下，sin 正值 = 向下
 
 CLOCK_DIRECTIONS: list[tuple[float, float]] = [
-    (math.cos(math.radians(i * 30)), math.sin(math.radians(i * 30)))
-    for i in range(12)
+    (math.cos(math.radians(i * 45)), math.sin(math.radians(i * 45)))
+    for i in range(8)
 ]
 # 手动展开以明确每个方向：
 #  0: ( 1.000,  0.000) → 右
