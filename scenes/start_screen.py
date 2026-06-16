@@ -3,22 +3,25 @@ import pygame
 from settings import SCREEN_WIDTH, SCREEN_HEIGHT, COLORS
 from scenes.base_scene import Scene
 
+
 class StartScreen(Scene):
     def __init__(self, screen):
         self.screen = screen
         # 加载背景图（先放一张测试图，后续替换成你的美工资源）
         self.background = pygame.image.load("assets/images/start_bg.png").convert()
-        self.background = pygame.transform.scale(self.background, (1017, 720))
+        self.background = pygame.transform.scale(self.background,(1280,720))
         
-        # 准备文字（可以抽到单独的方法中，但简单项目放在 __init__ 也可）
-        self.font = pygame.font.Font(None, 36)
-        self.text_surface = self.font.render("Press ENTER to Start", True, (255, 255, 255))
-        # 动态计算文字位置（相对于屏幕，支持分辨率自适应）
-        self.text_rect = self.text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100))
+        #按钮开始游戏
+        self.startgame = pygame.image.load("assets/images/start_game.png").convert_alpha()
+        self.startgame = pygame.transform.scale(self.startgame,(1280,720))
+
+        #按钮制作人
+        self.credits = pygame.image.load("assets/images/credits.png").convert_alpha()
+        self.credits = pygame.transform.scale(self.credits,(1280,720))
         
         #按钮区域
-        self.btn_rect = pygame.Rect(SCREEN_WIDTH // 2 , SCREEN_HEIGHT - 100, 240, 60)
-        self.btn_text = self.font.render("CLICK TO START", True, COLORS["bg"])
+        self.btn_start = pygame.Rect(SCREEN_WIDTH // 2 - 110, 370, 220, 80)
+        self.btn_credits = pygame.Rect(SCREEN_WIDTH // 2 - 110, 480, 220, 80)
 
     def on_enter(self): 
         print("🟢 进入 START")
@@ -39,10 +42,13 @@ class StartScreen(Scene):
         if "CONFIRM" in input_state["context"]:
             return "LOBBY"
         
-         # 鼠标点击仍可直接处理（UI交互常见，，不强制走 InputManager）
+        # 鼠标点击仍可直接处理（UI交互常见，，不强制走 InputManager）
         if pygame.mouse.get_pressed()[0]:
-            if self.btn_rect.collidepoint(pygame.mouse.get_pos()):
+            if self.btn_start.collidepoint(pygame.mouse.get_pos()):
                 return "LOBBY"
+            if self.btn_credits.collidepoint(pygame.mouse.get_pos()):
+                return "CREDITS"
+            
             
 
         return None
@@ -56,8 +62,9 @@ class StartScreen(Scene):
     
     def draw(self, screen):
         """绘制开始页"""
-        super().draw(self.screen)
-        screen.blit(self.background, (131, 0))
-        screen.blit(self.text_surface, self.text_rect)
-        pygame.draw.rect(self.screen, COLORS["white"], self.btn_rect, border_radius=10, width=1)
-        self.screen.blit(self.btn_text, self.btn_text.get_rect(center=self.btn_rect.center))
+        super().draw(screen)
+        screen.blit(self.background, (0, 0))
+        screen.blit(self.startgame, (0, 0))
+        screen.blit(self.credits, (0, 0))
+        pygame.draw.rect(self.screen, COLORS["white"], self.btn_start, border_radius=10, width=1)
+        pygame.draw.rect(self.screen, COLORS["white"], self.btn_credits, border_radius=10, width=1)
