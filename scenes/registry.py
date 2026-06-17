@@ -3,13 +3,15 @@ from .start_screen import StartScreen
 from .lobby_screen import LobbyScreen
 from .game_screen import GameScreen
 from .credits_scene import CreditsScreen
+from .loading_screen import LoadingScreen
 
 # 场景工厂注册表：key为场景ID字符串，value为场景类
 SCENE_REGISTRY = {
     "START": StartScreen,
     "LOBBY": LobbyScreen,
     "GAME":  GameScreen,
-    "CREDITS": CreditsScreen
+    "CREDITS": CreditsScreen,
+    "LOAD": LoadingScreen
 }
 
 def get_scene_class(scene_id: str):

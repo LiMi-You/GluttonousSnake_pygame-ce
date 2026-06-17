@@ -32,9 +32,11 @@ class Scene:
         """
         return None
 
-    def update(self):
-        """每帧逻辑更新（移动、物理、AI、状态机等）"""
-        pass
+    def update(self) -> Optional[str]:
+        """每帧逻辑更新（移动、物理、AI、状态机等）
+        返回值: None 表示不切换，返回 "GAME"/"MENU" 等字符串表示目标场景
+        """
+        return None
 
     def draw(self, screen: pygame.Surface):
         """每帧绘制（背景、UI、角色等）"""

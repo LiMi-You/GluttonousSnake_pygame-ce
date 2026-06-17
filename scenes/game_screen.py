@@ -43,8 +43,18 @@ class GameScreen(Scene):
         self.game_over_start_tick: int = 0  # 游戏结束时的时间戳
         self.GAME_OVER_DELAY: int = 1500    # 死亡后可操作的最小等待（毫秒）
 
+        # ── 分数滚动动画 ──
+        SCORE_ANIM_DURATION = 2000          # 固定 2 秒
+        self._score_display: int = 0        # 当前显示值（滚动中）
+        self._score_anim_from: int = 0      # 动画起始值
+        self._score_target: int = 0         # 目标真实分数
+        self._score_anim_start: int = 0     # 动画开始时刻
+        self._score_animating: bool = False
+        self.SCORE_ANIM_DURATION: int = SCORE_ANIM_DURATION
+
         # ── 字体 ──
-        self.score_font = pygame.font.Font("assets/fonts/SmileySans-Oblique.ttf", 24)
+        self.score_font = pygame.font.Font("assets/fonts/DS-DIGIB.TTF", 58)
+        self.score_font_over = pygame.font.Font("assets/fonts/SmileySans-Oblique.ttf", 24)
         self.game_over_font = pygame.font.Font("assets/fonts/SmileySans-Oblique.ttf", 48)
 
         # ── 加载背景图层 ──
@@ -85,11 +95,15 @@ class GameScreen(Scene):
     def on_enter(self):
         """进入游戏场景时初始化/重置游戏状态"""
         print("🟢 进入 GAME（贪吃蛇）")
+        pygame.mixer.music.load("assets/sounds/game_music.mp3")
+        pygame.mixer.music.play(-1, 0, 0)
         self._reset_game()
 
     def on_exit(self):
         """离开游戏场景时的清理"""
         print("🔴 离开 GAME")
+        pygame.mixer.music.fadeout(500)
+        pygame.mixer.music.unload()
 
     def _reset_game(self):
         """重置游戏到初始状态"""
@@ -101,6 +115,12 @@ class GameScreen(Scene):
         self._move_accumulator = 0
         self.game_over_flag = False
         self.game_over_start_tick = 0
+        # ── 分数动画重置 ──
+        self._score_display = 0
+        self._score_anim_from = 0
+        self._score_target = 0
+        self._score_anim_start = 0
+        self._score_animating = False
         # ── NPC系统 ──
         self.npc_manager.reset()
         self.npc_manager.init_spawn(self.snake.body)
@@ -160,6 +180,15 @@ class GameScreen(Scene):
 
         delta_ms = now - self._last_tick
         self._last_tick = now
+
+        # ── 分数滚动动画（游戏结束时也要驱动，确保归位）──
+        if self._score_animating:
+            elapsed = now - self._score_anim_start
+            t = min(elapsed / self.SCORE_ANIM_DURATION, 1.0)
+            self._score_display = int(self._score_anim_from + (self._score_target - self._score_anim_from) * t)
+            if t >= 1.0:
+                self._score_display = self._score_target
+                self._score_animating = False
 
         # 游戏结束：不做移动更新
         if self.game_over_flag:
@@ -231,6 +260,11 @@ class GameScreen(Scene):
         self.stats.on_item_collected(item.item_id)
         self.snake.just_ate = True
         self.item_manager.remove_item(item)
+        # 触发分数滚动动画
+        self._score_anim_from = self._score_display
+        self._score_target = self.stats.get_score()
+        self._score_anim_start = pygame.time.get_ticks()
+        self._score_animating = True
 
     def _trigger_game_over(self):
         """触发游戏结束"""
@@ -301,13 +335,12 @@ class GameScreen(Scene):
                 pygame.draw.circle(screen, color, (cx, cy), ITEM_RENDER_SIZE // 2)
 
     def _draw_score(self, screen: pygame.Surface):
-        """绘制当前分数、蛇长和NPC数量"""
-        npc_count = self.npc_manager.alive_count
+        """绘制当前分数（滚动动画 + 零填充数码管风格）"""
         score_text = self.score_font.render(
-            f"得分：{self.stats.get_score()}  长度：{self.stats.get_snake_length()}  NPC：{npc_count}",
-            True, (255, 255, 255),
+            f"SCORE:{self._score_display:015d}",
+            True, (34, 219, 228),
         )
-        screen.blit(score_text, (MARGIN_LEFT, MARGIN_TOP - 36))
+        screen.blit(score_text, (333, 28))
 
     def _draw_game_over(self, screen: pygame.Surface):
         """绘制游戏结束提示"""

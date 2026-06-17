@@ -5,7 +5,8 @@ class InputManager:
     def __init__(self):
         self.context = "DEFAULT"
         self._pressed = set()
-        self._just_pressed = set()  # 仅单帧有效，防连触
+        self._just_pressed = set()       # 仅单帧有效，防连触
+        self._key_hold_start = {}        # {key_code: press_tick} 按下时刻记录
         
         # 🔑 全局快捷键（任何场景都优先拦截）
         self.global_map = {
@@ -51,16 +52,19 @@ class InputManager:
     def process_events(self, events):
         """消费 pygame 事件列表，更新输入状态"""
         self._just_pressed.clear()
+        now = pygame.time.get_ticks()
         for event in events:
             if event.type == pygame.KEYDOWN:
                 self._pressed.add(event.key)
                 self._just_pressed.add(event.key)
+                self._key_hold_start[event.key] = now      # 记录按下时刻
 
                 #测试用排查断点
                 # print(f"⌨️ 捕获按键: {pygame.key.name(event.key)} (code: {event.key})")
 
             elif event.type == pygame.KEYUP:
                 self._pressed.discard(event.key)
+                self._key_hold_start.pop(event.key, None)  # 清除时刻记录
 
     def get_actions(self) -> dict:
         """返回标准化输入数据，供场景消费"""
@@ -81,10 +85,18 @@ class InputManager:
         #测试用排查断点
         # print(f"🗺️ 映射结果 -> global: {global_actions} | context: {context_actions}")
 
+        # 计算每个按住键的持续时长（毫秒）
+        now = pygame.time.get_ticks()
+        held_durations = {
+            key: now - self._key_hold_start.get(key, now)
+            for key in self._pressed
+        }
+
         return {
             "global": global_actions,
             "context": context_actions,
-            "held_keys": self._pressed.copy()  # 长按状态（供持续移动等逻辑使用）
+            "held_keys": self._pressed.copy(),           # 长按状态（供持续移动等逻辑使用）
+            "held_durations": held_durations,             # {key_code: ms} 按住时长
         }
     
     

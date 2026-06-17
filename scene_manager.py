@@ -95,8 +95,10 @@ class SceneManager:
             if next_scene_id and next_scene_id != self.current_scene_id:
                 self.switch(next_scene_id)
             
-        # 4. 场景更新逻辑 (非输入相关的逻辑)
-        self.current_scene.update()
+        # 4. 场景更新逻辑 (非输入相关的逻辑，如倒计时、自动跳转)
+        next_from_update = self.current_scene.update()
+        if next_from_update and next_from_update != self.current_scene_id:
+            self.switch(next_from_update)
         
         # 5. 场景渲染
         self.current_scene.draw(self.screen)

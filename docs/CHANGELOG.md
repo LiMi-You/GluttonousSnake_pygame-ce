@@ -8,6 +8,49 @@
 
 ---
 
+## [v0.8.1] - 2026-06-17
+
+### ✨ Added
+
+#### Credits 场景交互增强
+- 鼠标移动检测：移动鼠标时显示全屏提示图（`assets/images/skip.png`），静止 1 秒后自动隐藏
+- 长按 R 键退出：按住 R 键 2.5 秒后返回 START 场景，中途松开则进度重置
+
+#### InputManager 按键按住时长能力
+- 新增 `_key_hold_start` 字典，KEYDOWN 时记录时刻，KEYUP 时清除
+- `get_actions()` 返回值新增 `held_durations` 字段：`{key_code: 持续毫秒数}`
+- 任何场景均可通过 `input_state["held_durations"]` 读取任意键的按住时长，无需自建状态机
+
+#### 框架：update() 场景切换能力
+- `SceneManager.handle_frame` 现在消费 `update()` 的返回值，支持通过 `update()` 触发场景切换
+- `base_scene.py` 中 `update()` 返回类型从 `None` 改为 `Optional[str]`
+- 与 `handle_input` 返回值语义一致：返回场景 ID 字符串表示切换，`None` 表示不切换
+
+#### LoadingScreen 加载过渡场景
+- 进入后随机等待 3~5 秒，自动跳转至 GAME 场景
+- 使用 `pygame.time.get_ticks()` 绝对时间计时，帧率无关
+
+#### GameScreen 分数滚动动画
+- 数码管风格零填充显示：`SCORE:000000000000000`（15 位）
+- lerp 线性插值滚动：加分后 2 秒内从旧值平滑滚到新值
+- 值与显示分离：`_score_display`（显示）与 `stats.get_score()`（真实分数）独立维护
+- 滚动中再次加分：从当前显示值重置动画，目标更新为最新分数
+
+### 🔧 Changed
+
+- `scene_manager.py` — `handle_frame` 中 `update()` 返回值不再丢弃，增加场景切换判断
+- `base_scene.py` — `update()` 签名改为 `-> Optional[str]`，文档补充返回值说明
+- `input_manager.py` — `__init__` 新增 `_key_hold_start`，`process_events` 记录/清除时刻，`get_actions` 计算 `held_durations`
+- `scenes/credits_scene.py` — 完整重写：新增鼠标提示图 + 长按 R 退出，后重构为使用 `held_durations`
+- `scenes/loading_screen.py` — 新增计时逻辑与 `_reset_game` → `update` 自动跳转
+- `scenes/game_screen.py` — 新增分数动画状态变量、lerp 更新、零填充渲染；音频 `play()` 从 `_reset_game` 移至 `on_enter`
+
+### 🐛 Fixed
+
+- 音频职责分离：`GameScreen._reset_game` 中的 `play()` 移至 `on_enter`，重置函数只管游戏状态
+
+---
+
 ## [v0.8.0] - 2026-06-07
 
 ### ✨ Added — NPC蛇子系统（Phase 1-6 完整交付）

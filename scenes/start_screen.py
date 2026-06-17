@@ -9,15 +9,15 @@ class StartScreen(Scene):
         self.screen = screen
         # 加载背景图（先放一张测试图，后续替换成你的美工资源）
         self.background = pygame.image.load("assets/images/start_bg.png").convert()
-        self.background = pygame.transform.scale(self.background,(1280,720))
+        self.background = pygame.transform.scale(self.background,(SCREEN_WIDTH,SCREEN_HEIGHT))
         
         #按钮开始游戏
         self.startgame = pygame.image.load("assets/images/start_game.png").convert_alpha()
-        self.startgame = pygame.transform.scale(self.startgame,(1280,720))
+        self.startgame = pygame.transform.scale(self.startgame,(SCREEN_WIDTH,SCREEN_HEIGHT))
 
         #按钮制作人
         self.credits = pygame.image.load("assets/images/credits.png").convert_alpha()
-        self.credits = pygame.transform.scale(self.credits,(1280,720))
+        self.credits = pygame.transform.scale(self.credits,(SCREEN_WIDTH,SCREEN_HEIGHT))
         
         #按钮区域
         self.btn_start = pygame.Rect(SCREEN_WIDTH // 2 - 110, 370, 220, 80)
@@ -30,6 +30,8 @@ class StartScreen(Scene):
     
     def on_exit(self): 
         print("🔴 离开 START")
+        pygame.mixer.music.fadeout(500)
+        pygame.mixer.music.unload()
 
     def handle_input(self, input_state: dict) -> str |None:
         """
@@ -45,7 +47,7 @@ class StartScreen(Scene):
         # 鼠标点击仍可直接处理（UI交互常见，，不强制走 InputManager）
         if pygame.mouse.get_pressed()[0]:
             if self.btn_start.collidepoint(pygame.mouse.get_pos()):
-                return "LOBBY"
+                return "LOAD"
             if self.btn_credits.collidepoint(pygame.mouse.get_pos()):
                 return "CREDITS"
             

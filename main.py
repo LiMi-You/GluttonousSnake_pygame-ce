@@ -4,7 +4,7 @@ import sys
 from settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
 from input_manager import InputManager
 from scene_manager import SceneManager
-from scenes.start_screen import StartScreen
+#from scenes.start_screen import StartScreen
 # 后续会创建 GameScreen，提前导入占位
 # from scenes.game_screen import GameScreen
 
