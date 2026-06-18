@@ -1,6 +1,12 @@
+# main.py
 import pygame
 import sys
-from settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, COLORS
+from settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
+from input_manager import InputManager
+from scene_manager import SceneManager
+#from scenes.start_screen import StartScreen
+# 后续会创建 GameScreen，提前导入占位
+# from scenes.game_screen import GameScreen
 
 def main():
     pygame.init()
@@ -8,22 +14,24 @@ def main():
     pygame.display.set_caption("My Pygame Game")
     clock = pygame.time.Clock()
 
+    # 1. 初始化输入管理器
+    input_mgr = InputManager()
+
+    # 2. 初始化场景管理器 (传入初始场景ID 和 输入管理器)
+    # 不再需要在这里 import 具体的 MenuScene 等类
+    scene_mgr = SceneManager(screen, initial_scene_id="START", input_manager=input_mgr)
+
     running = True
     while running:
-        # 1. 处理事件
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
+        # 事件处理：交给管理器，它会自动处理场景切换指令
+        events = pygame.event.get()
+        
+        # 将事件交给场景管理器处理
+        # 如果 handle_frame 返回 False，则停止循环
+        if scene_mgr.handle_frame(events) is False:
+            running = False
 
-        # 2. 清屏
-        screen.fill(COLORS["bg"])
-
-        # 3. 渲染区（暂时留空，以后在这里调用实体类的 update/draw）
-
-        # 4. 刷新屏幕
         pygame.display.flip()
-
-        # 5. 锁定帧率
         clock.tick(FPS)
 
     pygame.quit()
