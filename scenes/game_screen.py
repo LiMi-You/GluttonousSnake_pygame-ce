@@ -152,7 +152,7 @@ class GameScreen(Scene):
         # 游戏结束状态下：任意 CONFIRM 或点击 → 返回大厅
         if self.game_over_flag:
             if "CONFIRM" in input_state["context"] or pygame.mouse.get_pressed()[0]:
-                return "LOBBY"
+                return "START"
             return None
 
         # 正常游戏：方向输入
@@ -357,7 +357,7 @@ class GameScreen(Scene):
 
         # 提示文字
         stats = self.stats.get_all_stats()
-        hint_text = self.score_font.render(
+        hint_text = self.score_font_over.render(
             f"最终得分：{stats['score']}  最大连击：{stats['max_combo']} — 按任意键返回大厅",
             True, (200, 200, 200),
         )

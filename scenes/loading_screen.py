@@ -18,7 +18,7 @@ class LoadingScreen(Scene):
 
     def on_enter(self):
         print("🟢 进入 LOAD")
-        self._wait_ms = int(random.uniform(0.0, 1.0) * 1000)
+        self._wait_ms = int(random.uniform(0.0, 3.0) * 1000)
         self._start_tick = pygame.time.get_ticks()
 
     def on_exit(self):

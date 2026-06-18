@@ -92,7 +92,7 @@ class ObstacleAvoidance:
         head: tuple[int, int],
         direction: tuple[int, int],
         collision_mgr: 'CollisionManager',
-        steps: int = None,
+        steps: Optional[int] = None,
     ) -> int:
         """
         前瞻检测：沿 direction 方向，连续多少格是畅通的。

@@ -20,8 +20,8 @@ class StartScreen(Scene):
         self.credits = pygame.transform.scale(self.credits,(SCREEN_WIDTH,SCREEN_HEIGHT))
         
         #按钮区域
-        self.btn_start = pygame.Rect(SCREEN_WIDTH // 2 - 110, 370, 220, 80)
-        self.btn_credits = pygame.Rect(SCREEN_WIDTH // 2 - 110, 480, 220, 80)
+        self.btn_start = pygame.Rect(953, 240, 163, 105)
+        self.btn_credits = pygame.Rect(960, 366, 117, 88)
 
     def on_enter(self): 
         print("🟢 进入 START")
@@ -68,5 +68,5 @@ class StartScreen(Scene):
         screen.blit(self.background, (0, 0))
         screen.blit(self.startgame, (0, 0))
         screen.blit(self.credits, (0, 0))
-        pygame.draw.rect(self.screen, COLORS["white"], self.btn_start, border_radius=10, width=1)
-        pygame.draw.rect(self.screen, COLORS["white"], self.btn_credits, border_radius=10, width=1)
+        # pygame.draw.rect(self.screen, COLORS["white"], self.btn_start, border_radius=10, width=0)
+        # pygame.draw.rect(self.screen, COLORS["white"], self.btn_credits, border_radius=10, width=0)
