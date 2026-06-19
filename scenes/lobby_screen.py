@@ -11,7 +11,7 @@ from scenes.base_scene import Scene
 class LobbyScreen(Scene):
     """大厅场景：提供开始游戏入口"""
 
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, **kwargs):
         super().__init__(screen)
 
         # ── 标题 ──

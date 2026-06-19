@@ -11,7 +11,8 @@ class InputManager:
         # 🔑 全局快捷键（任何场景都优先拦截）
         self.global_map = {
             pygame.K_ESCAPE: "GLOBAL_QUIT",
-            pygame.K_F11: "TOGGLE_FULLSCREEN"
+            pygame.K_F11: "TOGGLE_FULLSCREEN",
+            pygame.K_F1: "TOGGLE_DEBUG",
         }
         
         # 🗺️ 上下文按键映射（后续可抽到 settings.py 配置化）

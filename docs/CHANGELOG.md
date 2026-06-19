@@ -8,46 +8,72 @@
 
 ---
 
-## [v0.8.1] - 2026-06-17
+## [v0.9.0] - 2026-06-19
 
-### ✨ Added
+### ✨ Added — 调试探针系统（Debug Probe）
 
-#### Credits 场景交互增强
-- 鼠标移动检测：移动鼠标时显示全屏提示图（`assets/images/skip.png`），静止 1 秒后自动隐藏
-- 长按 R 键退出：按住 R 键 2.5 秒后返回 START 场景，中途松开则进度重置
+#### 涉及文件
 
-#### InputManager 按键按住时长能力
-- 新增 `_key_hold_start` 字典，KEYDOWN 时记录时刻，KEYUP 时清除
-- `get_actions()` 返回值新增 `held_durations` 字段：`{key_code: 持续毫秒数}`
-- 任何场景均可通过 `input_state["held_durations"]` 读取任意键的按住时长，无需自建状态机
+| 文件 | 操作 |
+|:---|:---|
+| `debug/__init__.py` | **新增** — 探针模块包导出 |
+| `debug/probe_core.py` | **新增** — 数据收集核心（回调注册、快照、碰撞历史、FPS计算） |
+| `debug/probe_panel.py` | **新增** — UI面板（7个可折叠区块、鼠标滚轮滚动、窗口缩放适配） |
+| `debug/probe_window.py` | **新增** — 独立pygame窗口（位置记忆、10fps限频刷新） |
+| `input_manager.py` | **修改** — 添加 F1 → `TOGGLE_DEBUG` 映射 |
+| `scene_manager.py` | **修改** — 创建 `ProbeWindow`，分发窗口事件 |
+| `scenes/game_screen.py` | **修改** — 注册探针收集器，每帧 `tick()` 驱动数据收集 |
+| `scenes/base_scene.py` | **修改** — `__init__` 接受 `**kwargs`（兼容探针注入） |
+| `scenes/start_screen.py` | **修改** — `__init__` 接受 `**kwargs` |
+| `scenes/lobby_screen.py` | **修改** — `__init__` 接受 `**kwargs` |
+| `scenes/credits_scene.py` | **修改** — `__init__` 接受 `**kwargs` |
+| `scenes/loading_screen.py` | **修改** — `__init__` 接受 `**kwargs` |
 
-#### 框架：update() 场景切换能力
-- `SceneManager.handle_frame` 现在消费 `update()` 的返回值，支持通过 `update()` 触发场景切换
-- `base_scene.py` 中 `update()` 返回类型从 `None` 改为 `Optional[str]`
-- 与 `handle_input` 返回值语义一致：返回场景 ID 字符串表示切换，`None` 表示不切换
+#### 功能说明
 
-#### LoadingScreen 加载过渡场景
-- 进入后随机等待 3~5 秒，自动跳转至 GAME 场景
-- 使用 `pygame.time.get_ticks()` 绝对时间计时，帧率无关
+**按 F1 打开/关闭独立探针窗口**，显示游戏运行时的全部隐藏数据：
 
-#### GameScreen 分数滚动动画
-- 数码管风格零填充显示：`SCORE:000000000000000`（15 位）
-- lerp 线性插值滚动：加分后 2 秒内从旧值平滑滚到新值
-- 值与显示分离：`_score_display`（显示）与 `stats.get_score()`（真实分数）独立维护
-- 滚动中再次加分：从当前显示值重置动画，目标更新为最新分数
+| 区块 | 数据内容 |
+|:---|:---|
+| Player Snake | 蛇头位置、当前/下一方向、长度、移动累加器、是否刚吃、身体预览 |
+| NPCs | 存活/总数、每条蛇的类型、状态(UNFOLDING/ACTIVE/DEAD)、位置、方向 |
+| Items | 场上总数、生成计时器、按类型分组、移动道具位置和方向 |
+| Weight Calc | 分数、蛇长、当前阶段、允许分类、各修正因子、每个道具的详细权重 |
+| Collision | 占据格子数、最近碰撞事件历史 |
+| Performance | FPS（颜色编码）、帧耗时、总tick数 |
+| Stats | 分数、连击、游戏时长、蛇长、已收集道具统计 |
 
-### 🔧 Changed
+#### 权重计算显示详情
 
-- `scene_manager.py` — `handle_frame` 中 `update()` 返回值不再丢弃，增加场景切换判断
-- `base_scene.py` — `update()` 签名改为 `-> Optional[str]`，文档补充返回值说明
-- `input_manager.py` — `__init__` 新增 `_key_hold_start`，`process_events` 记录/清除时刻，`get_actions` 计算 `held_durations`
-- `scenes/credits_scene.py` — 完整重写：新增鼠标提示图 + 长按 R 退出，后重构为使用 `held_durations`
-- `scenes/loading_screen.py` — 新增计时逻辑与 `_reset_game` → `update` 自动跳转
-- `scenes/game_screen.py` — 新增分数动画状态变量、lerp 更新、零填充渲染；音频 `play()` 从 `_reset_game` 移至 `on_enter`
+每个道具显示完整的权重计算过程：
+```
+score_boost: w=87 (base=100 x0.91 x1.00 x0.10 x1.0) [9/30]
+              │       │      │      │      │       │
+              │       │      │      │      │       └─ [场上数/上限]
+              │       │      │      │      └─ 阶段倍率
+              │       │      │      └─ 分数因子（幸运/增益类在100k分前×0.1）
+              │       │      └─ 蛇长因子
+              │       └─ 场上数量压制（1 - (当前/上限)²）
+              └─ 最终权重
+```
 
-### 🐛 Fixed
+#### 窗口特性
 
-- 音频职责分离：`GameScreen._reset_game` 中的 `play()` 移至 `on_enter`，重置函数只管游戏状态
+- **独立pygame.Window**：不影响游戏窗口，可自由拖动
+- **位置记忆**：关闭后重新打开恢复上次位置
+- **鼠标滚轮滚动**：数据超出窗口高度时可滚动查看
+- **10fps限频**：不浪费性能，数据实时性足够
+
+#### 架构
+
+```
+GameScreen.update()
+  → probe_core.tick()        # 收集各模块数据到snapshot
+
+ProbeWindow.update()          # 独立于游戏的10fps刷新
+  → probe_panel.draw(surface) # 从snapshot读取并渲染
+  → window.flip()             # 刷新探针窗口
+```
 
 ---
 

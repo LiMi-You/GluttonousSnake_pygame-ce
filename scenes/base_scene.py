@@ -4,7 +4,7 @@ from typing import Optional
 
 class Scene:
     """所有场景的基类：定义标准生命周期与输入接口"""
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, **kwargs):
         self.screen = screen
         self.w = screen.get_width()
         self.h = screen.get_height()

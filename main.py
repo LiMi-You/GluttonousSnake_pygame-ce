@@ -31,6 +31,9 @@ def main():
         if scene_mgr.handle_frame(events) is False:
             running = False
 
+        # 更新探针窗口（限频10fps，不阻塞）
+        scene_mgr.probe_window.update(pygame.time.get_ticks())
+
         pygame.display.flip()
         clock.tick(FPS)
 

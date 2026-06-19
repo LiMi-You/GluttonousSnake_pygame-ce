@@ -3,6 +3,7 @@ import pygame
 from scenes.registry import get_scene_class, SCENE_REGISTRY
 from input_manager import InputManager
 from quit_overlay import QuitOverlay
+from debug import DebugProbe, ProbeWindow
 
 class SceneManager:
     def __init__(self, screen, initial_scene_id: str, input_manager: InputManager):
@@ -14,6 +15,10 @@ class SceneManager:
 
         # 退出确认覆盖层
         self.quit_overlay = QuitOverlay(screen.get_width(), screen.get_height())
+
+        # 调试探针
+        self.debug_probe = DebugProbe()
+        self.probe_window = ProbeWindow(screen, self.debug_probe)
 
         # 初始化第一个场景
         self.switch(initial_scene_id)
@@ -31,7 +36,7 @@ class SceneManager:
         try:
             SceneClass = get_scene_class(scene_id)
             # 假设场景构造函数需要 input_manager 和其他必要依赖
-            self.current_scene = SceneClass(self.screen)
+            self.current_scene = SceneClass(self.screen, debug_probe=self.debug_probe)
             
             self.current_scene_id = scene_id
             
@@ -53,6 +58,10 @@ class SceneManager:
             if event.type == pygame.QUIT:
                 return False          # 通知主循环退出
 
+        # 🔹 探针窗口事件处理
+        for event in events:
+            self.probe_window.handle_event(event)
+
         # 1. 获取标准化动作
         self.input_manager.process_events(events)
         actions = self.input_manager.get_actions()
@@ -60,6 +69,9 @@ class SceneManager:
         # 2. 全局拦截 (Alt+Enter 全屏)
         if "TOGGLE_FULLSCREEN" in actions["global"]:
             pygame.display.toggle_fullscreen()
+
+        if "TOGGLE_DEBUG" in actions["global"]:
+            self.probe_window.toggle()
         
         # ── 退出覆盖层逻辑 ──
         if self.quit_overlay.active:

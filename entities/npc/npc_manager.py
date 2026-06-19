@@ -20,7 +20,7 @@ from .npc_types import (
 )
 from .spawn_manager import SpawnManager
 from .collision_manager import CollisionManager, CollisionType
-from .navigation import create_strategy, NavContext
+from .navigation import create_strategy, NavContext, NavigationStrategy
 
 if TYPE_CHECKING:
     from items.item_manager import ItemManager
@@ -60,7 +60,7 @@ class NPCManager:
         self._next_spawn_interval: int = self._random_spawn_interval()
 
         # 为每种NPC类型缓存导航策略实例
-        self._strategies: dict[str, object] = {}  # npc_id -> strategy
+        self._strategies: dict[str, NavigationStrategy] = {}
 
         # 已初始化标记
         self._initialized = False

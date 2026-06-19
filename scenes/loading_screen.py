@@ -7,7 +7,7 @@ from scenes.base_scene import Scene
 class LoadingScreen(Scene):
     """加载过渡场景：显示 loading 画面，随机等待 3~5 秒后自动跳转 GAME"""
 
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, **kwargs):
         super().__init__(screen)
         self.screen = screen
         self.loadimage = pygame.image.load("assets/images/loading.png").convert_alpha()

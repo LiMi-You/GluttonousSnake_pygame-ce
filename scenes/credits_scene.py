@@ -13,7 +13,7 @@ class CreditsScreen(Scene):
     MOUSE_IDLE_TIMEOUT = 1.0    # 鼠标静止后隐藏提示图（秒）
     HINT_IMAGE_PATH = "assets/images/skip.png"
 
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, **kwargs):
         super().__init__(screen)
         self.screen = screen
 

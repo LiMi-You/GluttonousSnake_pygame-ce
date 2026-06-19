@@ -5,7 +5,7 @@ from scenes.base_scene import Scene
 
 
 class StartScreen(Scene):
-    def __init__(self, screen):
+    def __init__(self, screen, **kwargs):
         self.screen = screen
         # 加载背景图（先放一张测试图，后续替换成你的美工资源）
         self.background = pygame.image.load("assets/images/start_bg.png").convert()

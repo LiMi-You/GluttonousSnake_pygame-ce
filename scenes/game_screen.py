@@ -20,13 +20,18 @@ from entities.player import Snake
 from entities.npc import NPCManager
 from items import ItemManager, ItemInstance
 from utils import StatsManager
+from debug import DebugProbe
 
 
 class GameScreen(Scene):
     """贪吃蛇游戏场景"""
 
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, debug_probe: DebugProbe | None = None):
         super().__init__(screen)
+
+        # ── 调试探针 ──
+        self.debug_probe = debug_probe or DebugProbe()
+        self._register_probe_collectors()
 
         # ── 游戏实体 ──
         self.snake = Snake()
@@ -89,6 +94,153 @@ class GameScreen(Scene):
                 except FileNotFoundError:
                     print(f"⚠️ 道具图片缺失: assets/images/{defn.image_key}，使用纯色替代")
                     self._item_images[item_id] = None
+
+    # ── 探针注册 ──
+
+    def _register_probe_collectors(self):
+        """注册探针数据收集回调"""
+        probe = self.debug_probe
+
+        def collect_snake():
+            DIR_MAP = {(0, -1): "UP", (0, 1): "DOWN", (-1, 0): "LEFT", (1, 0): "RIGHT"}
+            return {
+                "head": self.snake.body[0],
+                "current_direction": self.snake.current_direction,
+                "next_direction": self.snake.next_direction,
+                "length": len(self.snake.body),
+                "move_accumulator": self._move_accumulator,
+                "just_ate": self.snake.just_ate,
+                "body_preview": self.snake.body[:5],
+            }
+
+        def collect_npcs():
+            npc_list = []
+            for i, npc in enumerate(self.npc_manager.npcs):
+                npc_list.append({
+                    "index": i,
+                    "type": npc.npc_type.npc_id,
+                    "state": npc.spawn_state.name,
+                    "length": len(npc.body),
+                    "head": npc.head,
+                    "direction": npc.current_direction,
+                    "move_accumulator": npc._move_accumulator,
+                })
+            return {
+                "alive_count": self.npc_manager.alive_count,
+                "total_count": self.npc_manager.total_count,
+                "list": npc_list,
+            }
+
+        def collect_items():
+            mgr = self.item_manager
+            by_type: dict[str, int] = {}
+            moving_items = []
+            for item in mgr.active_items:
+                by_type[item.item_id] = by_type.get(item.item_id, 0) + 1
+                if item.defn.is_moving and not item.picked:
+                    moving_items.append({
+                        "id": item.item_id,
+                        "fx": item.fx,
+                        "fy": item.fy,
+                        "dir": item.move_dir,
+                    })
+            return {
+                "total": len(mgr.active_items),
+                "spawn_accumulator": mgr._spawn_accumulator,
+                "by_type": by_type,
+                "moving_items": moving_items,
+            }
+
+        def collect_collision():
+            occupied: set = set(self.snake.body)
+            for npc in self.npc_manager.npcs:
+                if npc.is_alive:
+                    for cell in npc.body:
+                        occupied.add(cell)
+            for item in self.item_manager.active_items:
+                for cell in item.occupied_cells:
+                    occupied.add(cell)
+            return {
+                "occupied_cells": len(occupied),
+            }
+
+        def collect_stats():
+            return self.stats.get_all_stats()
+
+        def collect_weights():
+            from items.difficulty_phases import (
+                get_active_phases, get_allowed_categories,
+                merge_multipliers, get_allowed_item_ids,
+            )
+            from items.weight_calculator import (
+                calc_screen_count_modifier, calc_length_modifier,
+                calc_score_modifier,
+            )
+            from items.item_defs import ITEM_DEFS
+            from settings import PHASE_EARLY_MAX_SCORE
+
+            score = self.stats.get_score()
+            snake_len = len(self.snake.body)
+
+            # 当前阶段
+            active_phases = get_active_phases(score, snake_len)
+            phase_names = []
+            for p in active_phases:
+                name = f"score>={p.min_score}"
+                if p.min_length > 0:
+                    name += f" len>={p.min_length}"
+                phase_names.append(name)
+
+            allowed_cats = get_allowed_categories(active_phases)
+            merged_mult = merge_multipliers(active_phases)
+            allowed_ids = get_allowed_item_ids(allowed_cats)
+
+            # 场上计数
+            current_counts: dict[str, int] = {}
+            for item in self.item_manager.active_items:
+                current_counts[item.item_id] = current_counts.get(item.item_id, 0) + 1
+
+            # 计算每个道具的详细权重
+            weight_details = []
+            for item_id in allowed_ids:
+                defn = ITEM_DEFS.get(item_id)
+                if defn is None:
+                    continue
+                base_w = defn.base_weight
+                count_mod = calc_screen_count_modifier(
+                    current_counts.get(item_id, 0), defn.max_on_screen
+                )
+                len_mod = calc_length_modifier(defn.category, snake_len)
+                score_mod = calc_score_modifier(defn.category, score, PHASE_EARLY_MAX_SCORE)
+                cat_mult = merged_mult.get(defn.category, 1.0)
+                final_w = base_w * count_mod * len_mod * score_mod * cat_mult
+                weight_details.append({
+                    "id": item_id,
+                    "base": base_w,
+                    "count_mod": count_mod,
+                    "len_mod": len_mod,
+                    "score_mod": score_mod,
+                    "cat_mult": cat_mult,
+                    "final": int(round(final_w)),
+                    "on_screen": current_counts.get(item_id, 0),
+                    "max": defn.max_on_screen,
+                })
+
+            return {
+                "score": score,
+                "snake_len": snake_len,
+                "active_phases": phase_names,
+                "allowed_cats": list(allowed_cats),
+                "merged_mult": merged_mult,
+                "weight_details": weight_details,
+            }
+
+        probe.register("snake", collect_snake)
+        probe.register("npcs", collect_npcs)
+        probe.register("items", collect_items)
+        probe.register("collision", collect_collision)
+        probe.register("stats", collect_stats)
+        probe.register("weights", collect_weights)
 
     # ── 场景生命周期 ──
 
@@ -218,6 +370,9 @@ class GameScreen(Scene):
 
         # ── 同步蛇长到统计模块 ──
         self.stats.set_snake_length(len(self.snake.body))
+
+        # ── 驱动探针收集 ──
+        self.debug_probe.tick()
 
     def _game_step(self):
         """执行一步游戏逻辑：预判碰撞 → 移动蛇 → 检测道具"""
