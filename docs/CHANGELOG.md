@@ -8,6 +8,146 @@
 
 ---
 
+## [v0.10.0] - 2026-06-19
+
+### ✨ Added — 道具系统扩展（第二批全部道具 + 事件总线）
+
+#### 涉及文件
+
+| 文件 | 操作 |
+|:---|:---|
+| `items/buff_manager.py` | **新增** — Buff/Debuff管理器（加速/减速/清场buff） |
+| `items/event_bus.py` | **新增** — 事件总线（清场锁、待增长队列、待加分数） |
+| `items/movement.py` | **新增** — 新移动引擎（轴锁定为核心，可通过开关切换） |
+| `items/item_defs.py` | **修改** — 新增7个道具定义 + `move_axis_lock` 字段 |
+| `items/item_manager.py` | **修改** — 集成EventBus、新旧移动引擎切换、轴锁定移动逻辑 |
+| `items/__init__.py` | **修改** — 导出BuffManager |
+| `entities/npc/npc_manager.py` | **修改** — 新增obstacles参数、EventBus集成 |
+| `scenes/game_screen.py` | **修改** — BuffManager/EventBus集成、清场碰撞逻辑、增长队列 |
+| `debug/probe_panel.py` | **修改** — 显示Buff状态和清场模式 |
+| `settings.py` | **修改** — 新增`USE_NEW_MOVEMENT`开关 |
+
+#### 新增道具一览
+
+| 道具ID | 名称 | 分类 | 占格 | 权重 | max | 特性 |
+|:---|:---|:---|:---|:---|:---|:---|
+| `speed_boost` | 加速道具 | buff | 1×1 | 20 | 1 | 拾取后5秒内速度×2 |
+| `slow_down` | 减速道具 | debuff | 1×1 | 20 | 1 | 拾取后10秒内速度×0.67 |
+| `common_obstacle` | 障碍物 | obstacle | 1×1 | 70 | 4 | 玩家碰到即死，NPC自动避障 |
+| `large_static_obstacle` | 大型静止障碍物 | obstacle | 2×2 | 50 | 4 | 玩家碰到即死，NPC自动避障 |
+| `large_patrol_obstacle` | 大型巡逻障碍物 | obstacle | 2×2 | 50 | 4 | 沿X/Y轴巡逻，碰到边界反转 |
+| `lucky_clear_block` | 幸运清场 | lucky | 2×2 | 10 | 1 | 5秒内可撞击NPC/障碍物，撞墙仍死 |
+| `unique_bouncing_lucky_prop` | 弹跳幸运道具 | lucky | 2×2 | 5 | 1 | 全场弹跳，碰到触发全场清除 |
+
+#### Buff/Debuff系统（`items/buff_manager.py`）
+
+**核心机制：**
+- `BuffManager` 管理玩家身上的所有时效性状态
+- 支持速度系数叠加（加速×0.5、减速×1.5）
+- 加速/减速互斥：后拾取的覆盖先拾取的
+- 支持 `clear_mode` 标记：清场模式下可撞击NPC/障碍物
+
+**Buff类型：**
+| Buff | 持续时间 | 效果 |
+|:---|:---|:---|
+| `speed_boost` | 5秒 | 移动速度×2 |
+| `slow_down` | 10秒 | 移动速度×0.67 |
+| `lucky_clear_block` | 5秒 | 可撞击NPC/障碍物（撞墙仍死） |
+
+#### 移动系统架构
+
+**移动模式对照：**
+| 模式 | 旧引擎 | 新引擎 | 配置 |
+|:---|:---|:---|:---|
+| 范围轴锁定 | ✅ | ✅ | `move_axis_lock="x"/"y"`, `move_range>0` |
+| 全场轴锁定 | ✅ | ✅ | `move_axis_lock="x"/"y"`, `move_range=0` |
+| 范围自由移动 | ✅ | ✅ | `move_axis_lock=""`, `move_range>0` |
+| 全场边界反弹 | ✅ | ✅ | `move_bounce=True` |
+
+**引擎切换：**
+- `settings.py` 中 `USE_NEW_MOVEMENT = True` 用新引擎
+- `USE_NEW_MOVEMENT = False` 用旧引擎（作为fallback）
+
+#### 事件总线（`items/event_bus.py`）
+
+**核心职责：**
+1. 清场锁：防止清场期间生成新道具
+2. 待增长队列：蛇增长逐步执行（每帧+1节）
+3. 待加分数：分数动画一次性触发
+
+**状态管理：**
+```python
+EventBus:
+  clearing: bool      # 清场锁
+  pending_growth: int  # 待增长节数
+  pending_score: int   # 待加分数
+```
+
+**时序控制：**
+```
+UniqueBouncingLuckyProp碰到玩家
+  ↓
+event_bus.start_clear()  → clearing=True
+  ↓
+NPC全部kill()  → 掉落物正常生成
+  ↓
+所有道具移除  → 包括刚掉落的
+  ↓
+event_bus.finish_clear(score, growth)
+  ↓
+后续帧: 逐步执行增长和分数动画
+```
+
+#### 碰撞系统增强
+
+**清场模式碰撞逻辑：**
+- 碰到墙壁 → 永远死亡（不受buff影响）
+- 碰到NPC → 清场模式下NPC死亡，否则玩家死亡
+- 碰到障碍物 → 清场模式下障碍物移除，否则玩家死亡
+
+**NPC避障增强：**
+- `NPCManager.update()` 新增 `obstacles` 参数
+- 障碍物自动纳入碰撞占据图
+- NPC导航系统自动避障
+
+#### 探针系统增强
+
+**新增显示内容：**
+- Buff状态：显示当前激活的buff类型、剩余时间、效果
+- 清场模式：显示CLEAR标记
+- 速度系数：显示当前速度倍率
+
+#### 架构变更
+
+```
+GameScreen
+  ├─ EventBus          ← 新增 — 事件总线
+  ├─ BuffManager       ← 新增 — Buff管理
+  ├─ ItemManager
+  │    └─ event_bus    ← 清场锁检查
+  ├─ NPCManager
+  │    └─ event_bus    ← 清场时跳过掉落（由EventBus控制）
+  └─ 移动引擎
+       ├─ items/movement.py  ← 新引擎
+       └─ item_manager._update_moving_items()  ← 旧引擎
+```
+
+#### 已知问题
+
+- **碰撞时序问题**：道具每帧移动，蛇按MOVE_INTERVAL步进，可能导致视觉位置与碰撞网格不一致。已记录，待后续统一处理。
+- **移动架构债务**：旧引擎保留作为fallback，新引擎以轴锁定为核心。未来可能需要统一。
+
+#### 后续规划
+
+- [x] 道具权重系统（动态调整、阶段解锁、安全区）
+- [x] 多类型道具功能实现（加速/减速/障碍物/清场）
+- [x] 蛇的Buff系统（时效性效果管理）
+- [ ] 配置面板（调试/测试/平衡性调整）
+- [ ] 碰撞系统优化（统一float碰撞或网格碰撞）
+- [ ] 道具拾取音效与视觉反馈
+
+---
+
 ## [v0.9.0] - 2026-06-19
 
 ### ✨ Added — 调试探针系统（Debug Probe）

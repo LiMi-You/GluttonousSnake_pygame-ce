@@ -47,13 +47,16 @@ class NPCManager:
         "hunter": 15,
     }
 
-    def __init__(self, item_manager: Optional['ItemManager'] = None):
+    def __init__(self, item_manager: Optional['ItemManager'] = None, event_bus=None):
         self.npcs: list[NPCSnake] = []
         self.spawn_mgr = SpawnManager()
         self.collision_mgr = CollisionManager()
 
         # 道具管理器引用（用于NPC拾取和死亡掉落）
         self.item_manager = item_manager
+
+        # 事件总线引用（用于清场锁）
+        self.event_bus = event_bus
 
         # 出生计时器
         self._spawn_timer: int = 0
@@ -92,6 +95,7 @@ class NPCManager:
         player_body: list[tuple[int, int]],
         active_items: list,
         delta_ms: int,
+        obstacles: Optional[set[tuple[int, int]]] = None,
     ):
         """
         每帧调用。
@@ -100,9 +104,10 @@ class NPCManager:
             player_body:  玩家蛇身坐标列表
             active_items: 场上道具列表（ItemInstance）
             delta_ms:     帧间时间差（毫秒）
+            obstacles:    障碍物占据的格子集合
         """
         # 1. 重建全局碰撞占据图
-        self.collision_mgr.rebuild(player_body, self.npcs)
+        self.collision_mgr.rebuild(player_body, self.npcs, obstacles)
 
         # 2. 周期性出生
         self._spawn_timer += delta_ms

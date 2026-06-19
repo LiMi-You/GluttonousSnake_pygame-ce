@@ -18,7 +18,8 @@ from settings import (
 from scenes.base_scene import Scene
 from entities.player import Snake
 from entities.npc import NPCManager
-from items import ItemManager, ItemInstance
+from items import ItemManager, ItemInstance, BuffManager
+from items.event_bus import EventBus
 from utils import StatsManager
 from debug import DebugProbe
 
@@ -35,9 +36,11 @@ class GameScreen(Scene):
 
         # ── 游戏实体 ──
         self.snake = Snake()
-        self.item_manager = ItemManager()
+        self.event_bus = EventBus()
+        self.item_manager = ItemManager(event_bus=self.event_bus)
         self.stats = StatsManager()
-        self.npc_manager = NPCManager(item_manager=self.item_manager)
+        self.buff_manager = BuffManager()
+        self.npc_manager = NPCManager(item_manager=self.item_manager, event_bus=self.event_bus)
 
         # ── 移动计时器（使用 get_ticks 差值，不依赖外部传 delta）──
         self._last_tick: int = 0          # 上一帧的绝对毫秒时间戳
@@ -47,6 +50,13 @@ class GameScreen(Scene):
         self.game_over_flag: bool = False
         self.game_over_start_tick: int = 0  # 游戏结束时的时间戳
         self.GAME_OVER_DELAY: int = 1500    # 死亡后可操作的最小等待（毫秒）
+
+        # ── Buff 持续时间 ──
+        self.BUFF_SPEED_BOOST_DURATION = 5000   # 加速：5秒
+        self.BUFF_SLOW_DOWN_DURATION = 10000    # 减速：10秒
+        self.BUFF_SPEED_BOOST_MULT = 0.5        # 加速系数（×2速）
+        self.BUFF_SLOW_DOWN_MULT = 1.5          # 减速系数（×0.67速）
+        self.BUFF_CLEAR_DURATION = 5000         # 清场buff：5秒
 
         # ── 分数滚动动画 ──
         SCORE_ANIM_DURATION = 2000          # 固定 2 秒
@@ -149,6 +159,8 @@ class GameScreen(Scene):
                 "spawn_accumulator": mgr._spawn_accumulator,
                 "by_type": by_type,
                 "moving_items": moving_items,
+                "active_buffs": self.buff_manager.get_active_buffs_info(),
+                "speed_mult": self.buff_manager.get_speed_multiplier(),
             }
 
         def collect_collision():
@@ -263,6 +275,7 @@ class GameScreen(Scene):
         self.item_manager.reset()
         self.stats.reset()
         self.stats.start_timer()
+        self.buff_manager.reset()
         self._last_tick = pygame.time.get_ticks()
         self._move_accumulator = 0
         self.game_over_flag = False
@@ -273,6 +286,8 @@ class GameScreen(Scene):
         self._score_target = 0
         self._score_anim_start = 0
         self._score_animating = False
+        # ── 事件总线 ──
+        self.event_bus.reset()
         # ── NPC系统 ──
         self.npc_manager.reset()
         self.npc_manager.init_spawn(self.snake.body)
@@ -333,6 +348,9 @@ class GameScreen(Scene):
         delta_ms = now - self._last_tick
         self._last_tick = now
 
+        # ── 更新 buff 计时器 ──
+        self.buff_manager.update(delta_ms)
+
         # ── 分数滚动动画（游戏结束时也要驱动，确保归位）──
         if self._score_animating:
             elapsed = now - self._score_anim_start
@@ -354,16 +372,19 @@ class GameScreen(Scene):
         )
 
         # ── 更新NPC管理器（AI决策 + 移动 + 碰撞）──
+        obstacle_cells = self._collect_obstacle_cells()
         self.npc_manager.update(
             self.snake.body,
             self.item_manager.active_items,
             delta_ms,
+            obstacles=obstacle_cells,
         )
 
         # 正常游戏：累加时间并驱动步进
         self._move_accumulator += delta_ms
-        while self._move_accumulator >= MOVE_INTERVAL:
-            self._move_accumulator -= MOVE_INTERVAL
+        effective_interval = MOVE_INTERVAL * self.buff_manager.get_speed_multiplier()
+        while self._move_accumulator >= effective_interval:
+            self._move_accumulator -= effective_interval
             self._game_step()
             if self.game_over_flag:
                 break  # 游戏结束则停止步进
@@ -376,12 +397,25 @@ class GameScreen(Scene):
 
     def _game_step(self):
         """执行一步游戏逻辑：预判碰撞 → 移动蛇 → 检测道具"""
-        # 0. 预计算新蛇头位置（不移动，仅预测）
+        # 0. 处理待增长队列（清场后蛇增长）
+        if self.event_bus.consume_growth():
+            self.snake.just_ate = True
+
+        # 0.5 处理待加分数
+        pending_score = self.event_bus.consume_score()
+        if pending_score > 0:
+            self.stats.add_score(pending_score)
+            self._score_anim_from = self._score_display
+            self._score_target = self.stats.get_score()
+            self._score_anim_start = pygame.time.get_ticks()
+            self._score_animating = True
+
+        # 1. 预计算新蛇头位置（不移动，仅预测）
         head = self.snake.body[0]
         dx, dy = self.snake.next_direction
         new_head = (head[0] + dx, head[1] + dy)
 
-        # 1. 撞墙检测（移动前）
+        # 1. 撞墙检测（移动前）— 墙壁永远致命
         if (new_head[0] < 0 or new_head[0] >= GRID_WIDTH or
                 new_head[1] < 0 or new_head[1] >= GRID_HEIGHT):
             self._trigger_game_over()
@@ -393,16 +427,29 @@ class GameScreen(Scene):
             self._trigger_game_over()
             return
 
-        # 3. 撞NPC检测（移动前，预判）
-        for npc in self.npc_manager.npcs:
-            if npc.is_alive and new_head in npc.body:
+        # 3. 撞障碍物检测
+        clear_mode = self.buff_manager.has_clear_mode()
+        obstacle_hit = self._find_obstacle_at(new_head)
+        if obstacle_hit:
+            if clear_mode:
+                self.item_manager.remove_item(obstacle_hit)
+            else:
                 self._trigger_game_over()
                 return
 
-        # 4. 移动蛇
+        # 4. 撞NPC检测
+        npc_hit = self._find_npc_at(new_head)
+        if npc_hit:
+            if clear_mode:
+                npc_hit.kill()
+            else:
+                self._trigger_game_over()
+                return
+
+        # 5. 移动蛇
         new_head = self.snake.move()
 
-        # 5. 检测是否碰撞到道具
+        # 6. 检测是否碰撞到道具
         collected = self.item_manager.check_collision(new_head)
         if collected:
             self._apply_item_effect(collected)
@@ -415,16 +462,86 @@ class GameScreen(Scene):
         self.stats.on_item_collected(item.item_id)
         self.snake.just_ate = True
         self.item_manager.remove_item(item)
+
+        # ── 速度类 buff 处理 ──
+        if item.item_id == "speed_boost":
+            self.buff_manager.add_buff(
+                "speed_boost",
+                self.BUFF_SPEED_BOOST_DURATION,
+                self.BUFF_SPEED_BOOST_MULT,
+            )
+        elif item.item_id == "slow_down":
+            self.buff_manager.add_buff(
+                "slow_down",
+                self.BUFF_SLOW_DOWN_DURATION,
+                self.BUFF_SLOW_DOWN_MULT,
+            )
+        elif item.item_id == "lucky_clear_block":
+            self.buff_manager.add_buff(
+                "lucky_clear_block",
+                self.BUFF_CLEAR_DURATION,
+                clear_mode=True,
+            )
+        elif item.item_id == "unique_bouncing_lucky_prop":
+            self._execute_full_clear(item.defn.score_value)
+
         # 触发分数滚动动画
         self._score_anim_from = self._score_display
         self._score_target = self.stats.get_score()
         self._score_anim_start = pygame.time.get_ticks()
         self._score_animating = True
 
+    def _execute_full_clear(self, bonus_score: int):
+        """执行全场清除：清NPC+清道具+奖励"""
+        # 1. 开始清场锁
+        self.event_bus.start_clear()
+
+        # 2. 杀死所有NPC（它们会正常掉落道具）
+        for npc in self.npc_manager.npcs:
+            if npc.is_alive:
+                npc.kill()
+
+        # 3. 清理死亡NPC（触发掉落）
+        self.npc_manager._cleanup_dead()
+
+        # 4. 清除所有道具（包括刚掉落的）
+        self.item_manager.active_items.clear()
+
+        # 5. 计算奖励：分数 + 蛇增长（按NPC数量）
+        npc_count = len(self.npc_manager.npcs)
+        growth_segments = max(1, npc_count // 2)  # 增长节数 = NPC数/2，最少1节
+
+        # 6. 完成清场
+        self.event_bus.finish_clear(bonus_score, growth_segments)
+
     def _trigger_game_over(self):
         """触发游戏结束"""
         self.game_over_flag = True
         self.game_over_start_tick = pygame.time.get_ticks()
+
+    def _collect_obstacle_cells(self) -> set[tuple[int, int]]:
+        """收集场上所有障碍物占据的格子"""
+        cells: set[tuple[int, int]] = set()
+        for item in self.item_manager.active_items:
+            if item.defn.category == "obstacle" and not item.picked:
+                for cell in item.occupied_cells:
+                    cells.add(cell)
+        return cells
+
+    def _find_obstacle_at(self, pos: tuple[int, int]) -> 'ItemInstance | None':
+        """查找指定位置的障碍物道具实例"""
+        for item in self.item_manager.active_items:
+            if item.defn.category == "obstacle" and not item.picked:
+                if item.contains(pos[0], pos[1]):
+                    return item
+        return None
+
+    def _find_npc_at(self, pos: tuple[int, int]) -> 'NPCSnake | None':
+        """查找指定位置的NPC蛇实例"""
+        for npc in self.npc_manager.npcs:
+            if npc.is_alive and pos in npc.body:
+                return npc
+        return None
 
     # ── 渲染 ──
 

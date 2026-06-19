@@ -58,6 +58,9 @@ PHASE_LATE_MIN_LENGTH = 20         # 中期 → 后期的蛇长门槛
 MOVE_ITEM_BASE_SPEED = 0.03        # 移动速度单位（格/帧），move_speed=1 时每帧移动 0.08 格 ≈ 42px/s @25fps
 # 速度公式: 实际速度(格/帧) = move_speed × MOVE_ITEM_BASE_SPEED
 
+# 移动引擎切换：True=新引擎(movement.py)，False=旧引擎(item_manager内联)
+USE_NEW_MOVEMENT = True
+
 # 网格线颜色
 GRID_LINE_COLOR = (54, 188, 217)   # 网格线颜色（青蓝）
 GRID_LINE_WIDTH = 2                # 网格线宽

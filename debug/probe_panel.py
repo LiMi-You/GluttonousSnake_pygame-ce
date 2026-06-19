@@ -264,6 +264,31 @@ class ProbePanel:
                 )
             if len(moving) > 5:
                 lines.append(("  ...", f"+{len(moving)-5} more", CLR_KEY))
+
+        # buff 状态
+        buffs = data.get("active_buffs", [])
+        speed_mult = data.get("speed_mult", 1.0)
+        if buffs:
+            lines.append(("─ Buffs", "─", CLR_KEY))
+            for b in buffs:
+                remaining_s = b.get("remaining_ms", 0) / 1000
+                mult = b.get("speed_mult", 1.0)
+                is_clear = b.get("clear_mode", False)
+                if is_clear:
+                    effect = "CLEAR"
+                elif mult < 1.0:
+                    effect = "FAST"
+                elif mult > 1.0:
+                    effect = "SLOW"
+                else:
+                    effect = "NONE"
+                lines.append((
+                    f"  {b.get('id', '?')}",
+                    f"{remaining_s:.1f}s ({effect})",
+                    CLR_ACCENT if (mult != 1.0 or is_clear) else CLR_VALUE,
+                ))
+            lines.append(("  SpeedMult", f"x{speed_mult}", CLR_ACCENT))
+
         return lines
 
     def _format_weights(self, snap: dict) -> list[tuple[str, str, tuple]]:

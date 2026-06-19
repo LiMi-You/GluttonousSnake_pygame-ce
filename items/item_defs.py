@@ -32,6 +32,7 @@ class ItemDef:
     move_speed: int = 0                  # 移动基准速度（× 速度常量 = 每帧格数）
     move_range: int = 0                  # 移动范围（格子数，0=无限制/全场）
     move_bounce: bool = False            # 是否边界反弹（True=全场反弹, False=区域内随机转向）
+    move_axis_lock: str = ""             # 轴锁定："x"=只沿X轴移动, "y"=只沿Y轴移动, ""=不限
 
 
 # ── 道具定义注册表 ──────────────────────────────────
@@ -66,6 +67,98 @@ ITEM_DEFS: dict[str, ItemDef] = {
         move_speed=1,           # 基准速度 1
         move_range=4,           # 4×4 格圆形区域内移动（half=2，边界安全）
         move_bounce=False,      # 范围内随机转向
+    ),
+    "speed_boost": ItemDef(
+        item_id="speed_boost",
+        name="加速道具",
+        category=CAT_BUFF,
+        grid_w=1,
+        grid_h=1,
+        base_weight=20,
+        max_on_screen=1,
+        color=(0, 200, 255),
+        score_value=500,
+        image_key="SpeedBoostProp.png",
+    ),
+    "slow_down": ItemDef(
+        item_id="slow_down",
+        name="减速道具",
+        category=CAT_DEBUFF,
+        grid_w=1,
+        grid_h=1,
+        base_weight=20,
+        max_on_screen=1,
+        color=(200, 100, 255),
+        score_value=300,
+        image_key="SlowDownProp.png",
+    ),
+    "common_obstacle": ItemDef(
+        item_id="common_obstacle",
+        name="障碍物",
+        category=CAT_OBSTACLE,
+        grid_w=1,
+        grid_h=1,
+        base_weight=70,
+        max_on_screen=4,
+        color=(100, 100, 100),
+        score_value=0,
+        image_key="CommonObstacle.png",
+    ),
+    "large_static_obstacle": ItemDef(
+        item_id="large_static_obstacle",
+        name="大型静止障碍物",
+        category=CAT_OBSTACLE,
+        grid_w=2,
+        grid_h=2,
+        base_weight=50,
+        max_on_screen=4,
+        color=(80, 80, 80),
+        score_value=0,
+        image_key="LargeStaticObstacle.png",
+    ),
+    "large_patrol_obstacle": ItemDef(
+        item_id="large_patrol_obstacle",
+        name="大型巡逻障碍物",
+        category=CAT_OBSTACLE,
+        grid_w=2,
+        grid_h=2,
+        base_weight=50,
+        max_on_screen=4,
+        color=(120, 60, 60),
+        score_value=0,
+        image_key="LargePatrolObstacle.png",
+        is_moving=True,
+        move_speed=1,
+        move_range=6,
+        move_axis_lock="",
+    ),
+    "lucky_clear_block": ItemDef(
+        item_id="lucky_clear_block",
+        name="幸运清场",
+        category=CAT_LUCKY,
+        grid_w=2,
+        grid_h=2,
+        base_weight=10,
+        max_on_screen=1,
+        color=(255, 255, 100),
+        score_value=1000,
+        image_key="LuckyClearBlock.png",
+    ),
+    "unique_bouncing_lucky_prop": ItemDef(
+        item_id="unique_bouncing_lucky_prop",
+        name="弹跳幸运道具",
+        category=CAT_LUCKY,
+        grid_w=2,
+        grid_h=2,
+        base_weight=5,
+        max_on_screen=1,
+        color=(255, 200, 50),
+        score_value=5000,
+        image_key="UniqueBouncingLuckyProp.png",
+        is_moving=True,
+        move_speed=1,
+        move_range=0,
+        move_bounce=True,
     ),
 }
 

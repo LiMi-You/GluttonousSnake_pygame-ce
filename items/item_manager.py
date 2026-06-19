@@ -17,6 +17,7 @@ from settings import (
     ITEM_SPAWN_INTERVAL, ITEM_MAX_ON_SCREEN, ITEM_BASE_SPAWN_COUNT,
     PHASE_EARLY_MAX_SCORE,
     MOVE_ITEM_BASE_SPEED,
+    USE_NEW_MOVEMENT,
 )
 from .item_defs import ITEM_DEFS, get_item_def
 from .item_base import ItemInstance
@@ -28,10 +29,11 @@ from utils.helpers import get_random_direction, get_new_direction, is_within_ran
 class ItemManager:
     """道具管理器 — 生成、碰撞"""
 
-    def __init__(self):
+    def __init__(self, event_bus=None):
         self.active_items: list[ItemInstance] = []
         self._spawn_accumulator: int = 0    # 生成计时累加器（毫秒）
         self.spawn_interval: int = ITEM_SPAWN_INTERVAL
+        self.event_bus = event_bus
 
     # ── 生命周期 ──
 
@@ -74,7 +76,11 @@ class ItemManager:
                 self._spawn_weighted(score, snake_length)
 
         # ── 更新可移动道具位置（每帧独立，不受蛇步频限制）──
-        self._update_moving_items(dt_ms)
+        if USE_NEW_MOVEMENT:
+            from .movement import update_moving_items
+            update_moving_items(self.active_items, dt_ms)
+        else:
+            self._update_moving_items(dt_ms)
 
     # ── 生成逻辑 ──
 
@@ -132,9 +138,18 @@ class ItemManager:
 
         # ── 可移动道具：初始化随机方向 ──
         if defn.is_moving:
-            direction, direction_idx = get_random_direction()
-            instance.move_dir = direction
-            instance.move_dir_idx = direction_idx
+            if defn.move_axis_lock:
+                # 轴锁定模式：随机选择正方向或负方向
+                if defn.move_axis_lock == "x":
+                    direction = (1, 0) if random.random() < 0.5 else (-1, 0)
+                else:
+                    direction = (0, 1) if random.random() < 0.5 else (0, -1)
+                instance.move_dir = direction
+                instance.move_dir_idx = 0
+            else:
+                direction, direction_idx = get_random_direction()
+                instance.move_dir = direction
+                instance.move_dir_idx = direction_idx
             instance.spawn_origin = (instance.fx, instance.fy)
 
         self.active_items.append(instance)
@@ -144,6 +159,10 @@ class ItemManager:
         基于动态权重系统选择一个道具类型并生成。
         这是常规生成的核心入口。
         """
+        # 0. 清场期间不生成新道具
+        if self.event_bus and not self.event_bus.can_spawn_items():
+            return
+
         # 1. 确定当前激活的阶段
         active_phases = get_active_phases(score, snake_length)
         if not active_phases:
@@ -194,8 +213,8 @@ class ItemManager:
         
         移动逻辑：
         1. 按方向和速度更新小数格坐标 (fx, fy)
-        2. 超出移动范围 → 随机换一个新方向
-        3. 未来扩展：move_bounce=True → 全场反弹
+        2. 超出移动范围 → 随机换一个新方向（或轴锁定模式下反转）
+        3. 全场反弹（move_bounce=True）
         """
         if dt_ms <= 0:
             return
@@ -214,8 +233,43 @@ class ItemManager:
             item.fx += dx * speed
             item.fy += dy * speed
 
-            # ── 范围限制：区域内移动（move_range > 0）──
-            if item.defn.move_range > 0:
+            # ── 轴锁定模式：沿单一轴移动 ──
+            if item.defn.move_axis_lock:
+                axis = item.defn.move_axis_lock
+                if item.defn.move_range > 0:
+                    # 范围内轴锁定：碰范围边界反转
+                    half = item.defn.move_range / 2.0
+                    if axis == "x":
+                        x_min = item.spawn_origin[0] - half
+                        x_max = item.spawn_origin[0] + half
+                        if item.fx < x_min or item.fx >= x_max:
+                            item.move_dir = (-dx, 0)
+                            item.fx = max(x_min, min(x_max - 0.01, item.fx))
+                    else:
+                        y_min = item.spawn_origin[1] - half
+                        y_max = item.spawn_origin[1] + half
+                        if item.fy < y_min or item.fy >= y_max:
+                            item.move_dir = (0, -dy)
+                            item.fy = max(y_min, min(y_max - 0.01, item.fy))
+                else:
+                    # 全场轴锁定：碰地图边界反转
+                    if axis == "x":
+                        if item.fx < 0:
+                            item.move_dir = (abs(dx), 0)
+                            item.fx = 0
+                        elif item.fx >= GRID_WIDTH:
+                            item.move_dir = (-abs(dx), 0)
+                            item.fx = GRID_WIDTH - 0.01
+                    else:
+                        if item.fy < 0:
+                            item.move_dir = (0, abs(dy))
+                            item.fy = 0
+                        elif item.fy >= GRID_HEIGHT:
+                            item.move_dir = (0, -abs(dy))
+                            item.fy = GRID_HEIGHT - 0.01
+
+            # ── 范围限制：区域内移动（非轴锁定模式）──
+            elif item.defn.move_range > 0:
                 if not is_within_range(
                     item.fx, item.fy,
                     item.spawn_origin[0], item.spawn_origin[1],
