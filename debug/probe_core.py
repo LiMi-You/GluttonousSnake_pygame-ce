@@ -10,7 +10,7 @@ debug/probe_core.py — 探针数据收集核心
 from __future__ import annotations
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 
@@ -40,18 +40,11 @@ class DebugProbe:
         self._frame_times: deque[float] = deque(maxlen=120)
         self._last_frame_time: float = time.perf_counter()
 
-        # 额外的标量数据（供外部直接写入）
-        self._scalars: dict[str, Any] = {}
-
     # ── 注册 ──
 
     def register(self, key: str, collector: Callable[[], dict]):
         """注册一个数据收集回调。key 为分区名（如 'snake', 'npcs'）。"""
         self._collectors[key] = collector
-
-    def set(self, key: str, value: Any):
-        """直接写入一个标量数据（如 'fps'）。"""
-        self._scalars[key] = value
 
     # ── 碰撞事件 ──
 
@@ -78,7 +71,6 @@ class DebugProbe:
                 snapshot[key] = collector()
             except Exception as e:
                 snapshot[key] = {"error": str(e)}
-        snapshot["_scalars"] = dict(self._scalars)
         self._snapshot = snapshot
 
     # ── 读取 ──

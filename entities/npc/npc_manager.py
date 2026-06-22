@@ -29,24 +29,6 @@ if TYPE_CHECKING:
 class NPCManager:
     """NPC管理器 — GameScreen 通过此类与NPC子系统交互"""
 
-    # ── 出生配置 ──
-    INITIAL_SPAWN_COUNT = 2           # 游戏开始时生成的NPC数量
-    SPAWN_INTERVAL_MIN = 8000         # 最小出生间隔（毫秒）
-    SPAWN_INTERVAL_MAX = 15000        # 最大出生间隔（毫秒）
-    MAX_NPCS = 8                      # 场上最大NPC数
-
-    # 初始生成的NPC类型（只生成标准蛇，简单安全）
-    INITIAL_SPAWN_TYPES = ["standard"]
-
-    # 周期性生成的NPC类型及其权重
-    PERIODIC_SPAWN_POOL = {
-        "standard": 40,
-        "foraging": 25,
-        "loot": 15,
-        "mythic": 5,
-        "hunter": 15,
-    }
-
     def __init__(self, item_manager: Optional['ItemManager'] = None, event_bus=None):
         self.npcs: list[NPCSnake] = []
         self.spawn_mgr = SpawnManager()
@@ -58,6 +40,23 @@ class NPCManager:
         # 事件总线引用（用于清场锁）
         self.event_bus = event_bus
 
+        # ── 出生配置（实例变量，支持运行时修改）──
+        self.spawn_enabled: bool = True           # NPC生成开关
+        self.initial_spawn_count: int = 2         # 游戏开始时生成的NPC数量
+        self.spawn_interval_min: int = 8000       # 最小出生间隔（毫秒）
+        self.spawn_interval_max: int = 15000      # 最大出生间隔（毫秒）
+        self.max_npcs: int = 8                    # 场上最大NPC数
+        self.initial_spawn_types: list[str] = ["standard"]  # 初始生成的NPC类型
+
+        # 周期性生成的NPC类型及其权重（可运行时调整）
+        self.periodic_spawn_pool: dict[str, int] = {
+            "standard": 40,
+            "foraging": 25,
+            "loot": 15,
+            "mythic": 5,
+            "hunter": 15,
+        }
+
         # 出生计时器
         self._spawn_timer: int = 0
         self._next_spawn_interval: int = self._random_spawn_interval()
@@ -67,6 +66,10 @@ class NPCManager:
 
         # 已初始化标记
         self._initialized = False
+
+        # 运行时控制
+        self.frozen: bool = False                 # 冻结所有NPC移动
+        self.speed_multiplier: float = 1.0        # 全局速度倍率
 
     # ── 生命周期 ──
 
@@ -84,8 +87,11 @@ class NPCManager:
             return
         self._initialized = True
 
-        for _ in range(self.INITIAL_SPAWN_COUNT):
-            npc_type_id = random.choice(self.INITIAL_SPAWN_TYPES)
+        if not self.spawn_enabled:
+            return
+
+        for _ in range(self.initial_spawn_count):
+            npc_type_id = random.choice(self.initial_spawn_types)
             self._try_spawn_npc(npc_type_id, player_body)
 
     # ── 帧更新 ──
@@ -110,14 +116,15 @@ class NPCManager:
         self.collision_mgr.rebuild(player_body, self.npcs, obstacles)
 
         # 2. 周期性出生
-        self._spawn_timer += delta_ms
-        if self._spawn_timer >= self._next_spawn_interval:
-            self._spawn_timer = 0
-            self._next_spawn_interval = self._random_spawn_interval()
-            if len(self.npcs) < self.MAX_NPCS:
-                npc_type_id = self._weighted_random_type()
-                if npc_type_id:
-                    self._try_spawn_npc(npc_type_id, player_body)
+        if self.spawn_enabled:
+            self._spawn_timer += delta_ms
+            if self._spawn_timer >= self._next_spawn_interval:
+                self._spawn_timer = 0
+                self._next_spawn_interval = self._random_spawn_interval()
+                if len(self.npcs) < self.max_npcs:
+                    npc_type_id = self._weighted_random_type()
+                    if npc_type_id:
+                        self._try_spawn_npc(npc_type_id, player_body)
 
         # 3. 更新每个NPC
         player_head = player_body[0] if player_body else None
@@ -126,9 +133,12 @@ class NPCManager:
             if not npc.is_alive:
                 continue
 
+            if self.frozen:
+                continue
+
             # 累加独立计时器
             npc._move_accumulator += delta_ms
-            interval = npc.move_interval_ms
+            interval = int(npc.move_interval_ms / self.speed_multiplier)
 
             while npc._move_accumulator >= interval:
                 npc._move_accumulator -= interval
@@ -229,7 +239,7 @@ class NPCManager:
         self, npc_type_id: str, player_body: list[tuple[int, int]],
     ) -> Optional[NPCSnake]:
         """尝试生成一个NPC"""
-        if len(self.npcs) >= self.MAX_NPCS:
+        if len(self.npcs) >= self.max_npcs:
             return None
 
         try:
@@ -332,11 +342,11 @@ class NPCManager:
     # ── 工具 ──
 
     def _random_spawn_interval(self) -> int:
-        return random.randint(self.SPAWN_INTERVAL_MIN, self.SPAWN_INTERVAL_MAX)
+        return random.randint(self.spawn_interval_min, self.spawn_interval_max)
 
     def _weighted_random_type(self) -> Optional[str]:
         """按权重随机选择NPC类型"""
-        pool = self.PERIODIC_SPAWN_POOL
+        pool = self.periodic_spawn_pool
         total = sum(pool.values())
         if total == 0:
             return None
@@ -355,3 +365,18 @@ class NPCManager:
     @property
     def total_count(self) -> int:
         return len(self.npcs)
+
+    # ── 调试控制接口 ──
+
+    def debug_spawn(self, npc_type_id: str, player_body: list[tuple[int, int]]) -> bool:
+        """手动生成指定类型的NPC（调试用）"""
+        if len(self.npcs) >= self.max_npcs:
+            return False
+        npc = self._try_spawn_npc(npc_type_id, player_body)
+        return npc is not None
+
+    def debug_kill_all(self):
+        """杀死所有NPC（调试用）"""
+        for npc in self.npcs:
+            if npc.is_alive:
+                npc.kill()

@@ -8,4 +8,9 @@ __pycache__/
 # 操作系统相关
 .DS_Store
 Thumbs.db
-(docs/CHANGELOG.md is just a markdown file, no need to ignore)
+
+# ImGui 生成的配置文件
+imgui.ini
+
+# 调试面板配置（用户个人设置，不提交）
+debug_config.json

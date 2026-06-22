@@ -3,7 +3,7 @@ import pygame
 from scenes.registry import get_scene_class, SCENE_REGISTRY
 from input_manager import InputManager
 from quit_overlay import QuitOverlay
-from debug import DebugProbe, ProbeWindow
+from debug import DebugProbe, ProbeWindow, DebugConfig
 
 class SceneManager:
     def __init__(self, screen, initial_scene_id: str, input_manager: InputManager):
@@ -18,7 +18,8 @@ class SceneManager:
 
         # 调试探针
         self.debug_probe = DebugProbe()
-        self.probe_window = ProbeWindow(screen, self.debug_probe)
+        self.debug_config = DebugConfig.load()
+        self.probe_window = ProbeWindow(screen, self.debug_probe, config=self.debug_config)
 
         # 初始化第一个场景
         self.switch(initial_scene_id)
@@ -35,21 +36,35 @@ class SceneManager:
         # 2. 从工厂获取新场景类并实例化
         try:
             SceneClass = get_scene_class(scene_id)
-            # 假设场景构造函数需要 input_manager 和其他必要依赖
-            self.current_scene = SceneClass(self.screen, debug_probe=self.debug_probe)
+            self.current_scene = SceneClass(self.screen, debug_probe=self.debug_probe,
+                                            debug_config=self.debug_config)
             
             self.current_scene_id = scene_id
+
+            # 3. 如果是 GAME 场景，将引用传递给探针窗口
+            if scene_id == "GAME":
+                if hasattr(self.current_scene, 'npc_manager'):
+                    self.probe_window.set_npc_manager(self.current_scene.npc_manager)
+                if hasattr(self.current_scene, 'snake'):
+                    self.probe_window.set_snake(self.current_scene.snake)
+                if hasattr(self.current_scene, 'item_manager'):
+                    self.probe_window.set_item_manager(self.current_scene.item_manager)
+                if hasattr(self.current_scene, 'buff_manager'):
+                    self.probe_window.set_buff_manager(self.current_scene.buff_manager)
+                # 同步配置（panel 可能还没创建，set_* 方法内部已处理）
+                if self.probe_window._panel:
+                    self.probe_window._panel._sync_config_to_npc()
+                    self.probe_window._panel._sync_config_to_items()
+                    self.probe_window._panel._sync_config_to_phase()
+                    self.probe_window._panel._sync_config_to_weight()
             
-            # 3. 同步输入上下文 (关键步骤)
-            # 场景初始化时会自动告诉 InputManager 当前需要什么按键映射
-            # if hasattr(self.input_manager, 'CONTEXT_ALIAS'):
+            # 4. 同步输入上下文
             self.input_manager.set_context(self.current_scene_id)
             
             self.current_scene.on_enter()
             
         except ValueError as e:
             print(f"错误: {e}")
-            # 这里可以 fallback 到一个错误场景或主菜单
 
     def handle_frame(self, events):
         """处理单帧逻辑"""
@@ -75,39 +90,33 @@ class SceneManager:
         
         # ── 退出覆盖层逻辑 ──
         if self.quit_overlay.active:
-            # 覆盖层激活时：临时切到 OVERLAY 上下文重新映射按键
-            # 注意：不重新调用 process_events，否则会清空 _just_pressed
             saved_ctx = self.input_manager.context
             self.input_manager.set_context("OVERLAY")
             overlay_actions = self.input_manager.get_actions()
-            self.input_manager.context = saved_ctx  # 恢复原上下文
+            self.input_manager.context = saved_ctx
 
-            # 叠加鼠标状态，供覆盖层检测按钮点击
             mouse_pressed = pygame.mouse.get_pressed()
             overlay_actions["mouse_clicked"] = mouse_pressed[0]
             overlay_actions["mouse_pos"] = pygame.mouse.get_pos()
 
             result = self.quit_overlay.handle_input(overlay_actions)
             if result is True:
-                return False  # 用户确认退出
-            # False 或 None → 继续渲染
+                return False
         else:
-            # 覆盖层未激活：ESC → 显示覆盖层（不直接退出）
             if "GLOBAL_QUIT" in actions["global"]:
                 self.quit_overlay.show()
-                # 不 return False，继续渲染，让用户看到原场景+覆盖层
         
         # 🔸 兜底处理：场景为空时只处理全局事件，跳过渲染
         if not self.current_scene:
             return True
     
-        # 3. 交给当前场景处理（覆盖层激活时跳过，防止按键干扰）
+        # 3. 交给当前场景处理
         if not self.quit_overlay.active:
             next_scene_id = self.current_scene.handle_input(actions)
             if next_scene_id and next_scene_id != self.current_scene_id:
                 self.switch(next_scene_id)
             
-        # 4. 场景更新逻辑 (非输入相关的逻辑，如倒计时、自动跳转)
+        # 4. 场景更新逻辑
         next_from_update = self.current_scene.update()
         if next_from_update and next_from_update != self.current_scene_id:
             self.switch(next_from_update)
@@ -115,7 +124,7 @@ class SceneManager:
         # 5. 场景渲染
         self.current_scene.draw(self.screen)
         
-        # 6. 覆盖层渲染（在场景之上）
+        # 6. 覆盖层渲染
         self.quit_overlay.draw(self.screen)
         
-        return True # 继续循环
+        return True

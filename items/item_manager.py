@@ -31,9 +31,37 @@ class ItemManager:
 
     def __init__(self, event_bus=None):
         self.active_items: list[ItemInstance] = []
-        self._spawn_accumulator: int = 0    # 生成计时累加器（毫秒）
-        self.spawn_interval: int = ITEM_SPAWN_INTERVAL
+        self._spawn_accumulator: int = 0
         self.event_bus = event_bus
+
+        # ── 生成配置（实例变量，支持运行时修改）──
+        self.spawn_interval: int = ITEM_SPAWN_INTERVAL
+        self.max_on_screen: int = ITEM_MAX_ON_SCREEN
+        self.initial_spawn_count: int = ITEM_BASE_SPAWN_COUNT
+        self.move_base_speed: float = MOVE_ITEM_BASE_SPEED
+
+        # ── 每类型权重覆盖 {item_id: base_weight}，None 表示使用 ItemDef 默认值 ──
+        self._weight_overrides: dict[str, int | None] = {}
+
+        # ── 每类型启用开关 {item_id: bool} ──
+        self._enabled_overrides: dict[str, bool] = {}
+
+    def get_effective_weight(self, item_id: str) -> int:
+        """获取道具的有效基础权重（考虑覆盖和开关）"""
+        if self._enabled_overrides.get(item_id, True) is False:
+            return 0
+        override = self._weight_overrides.get(item_id)
+        if override is not None:
+            return override
+        return ITEM_DEFS[item_id].base_weight
+
+    def set_weight_override(self, item_id: str, weight: int):
+        """设置道具权重覆盖"""
+        self._weight_overrides[item_id] = weight
+
+    def set_enabled(self, item_id: str, enabled: bool):
+        """设置道具启用/禁用"""
+        self._enabled_overrides[item_id] = enabled
 
     # ── 生命周期 ──
 
@@ -41,12 +69,11 @@ class ItemManager:
         """游戏重置时调用"""
         self.active_items.clear()
         self._spawn_accumulator = 0
-        # 游戏开始时生成初始数量的道具
         self._spawn_initial_items()
 
     def _spawn_initial_items(self):
         """游戏开始时生成初始数量的基础食物"""
-        for _ in range(ITEM_BASE_SPAWN_COUNT):
+        for _ in range(self.initial_spawn_count):
             self._spawn_one("score_boost")
 
     # ── 帧更新 ──
@@ -72,7 +99,7 @@ class ItemManager:
         while self._spawn_accumulator >= self.spawn_interval:
             self._spawn_accumulator -= self.spawn_interval
 
-            if len(self.active_items) < ITEM_MAX_ON_SCREEN:
+            if len(self.active_items) < self.max_on_screen:
                 self._spawn_weighted(score, snake_length)
 
         # ── 更新可移动道具位置（每帧独立，不受蛇步频限制）──
@@ -194,6 +221,8 @@ class ItemManager:
             phase_multipliers=merged_multipliers,
             early_max_score=PHASE_EARLY_MAX_SCORE,
             item_defs=ITEM_DEFS,
+            weight_overrides=self._weight_overrides,
+            enabled_overrides=self._enabled_overrides,
         )
 
         chosen_id = pick_item_by_weight(weight_table)

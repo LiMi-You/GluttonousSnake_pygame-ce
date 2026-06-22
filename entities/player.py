@@ -29,6 +29,11 @@ class Snake:
         # 是否在本轮移动中吃到了食物（外部设置）
         self.just_ate = False
 
+        # ── 调试标志（由 DebugConfig 控制）──
+        self.invincible: bool = False    # 无敌：碰撞不死
+        self.god_mode: bool = False      # 上帝模式：不撞墙
+        self._speed_multiplier: float = 1.0  # 速度倍率
+
     # ── 方向控制 ──
 
     def set_direction(self, dx: int, dy: int):

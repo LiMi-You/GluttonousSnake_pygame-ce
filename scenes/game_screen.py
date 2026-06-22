@@ -27,11 +27,13 @@ from debug import DebugProbe
 class GameScreen(Scene):
     """贪吃蛇游戏场景"""
 
-    def __init__(self, screen: pygame.Surface, debug_probe: DebugProbe | None = None):
+    def __init__(self, screen: pygame.Surface, debug_probe: DebugProbe | None = None,
+                 debug_config=None):
         super().__init__(screen)
 
         # ── 调试探针 ──
         self.debug_probe = debug_probe or DebugProbe()
+        self.debug_config = debug_config
         self._register_probe_collectors()
 
         # ── 游戏实体 ──
@@ -51,12 +53,18 @@ class GameScreen(Scene):
         self.game_over_start_tick: int = 0  # 游戏结束时的时间戳
         self.GAME_OVER_DELAY: int = 1500    # 死亡后可操作的最小等待（毫秒）
 
-        # ── Buff 持续时间 ──
-        self.BUFF_SPEED_BOOST_DURATION = 5000   # 加速：5秒
-        self.BUFF_SLOW_DOWN_DURATION = 10000    # 减速：10秒
-        self.BUFF_SPEED_BOOST_MULT = 0.5        # 加速系数（×2速）
-        self.BUFF_SLOW_DOWN_MULT = 1.5          # 减速系数（×0.67速）
-        self.BUFF_CLEAR_DURATION = 5000         # 清场buff：5秒
+        # ── Buff 持续时间（从 debug_config 读取，无配置则用默认值）──
+        if self.debug_config and hasattr(self.debug_config, 'buff'):
+            bc = self.debug_config.buff
+            self.BUFF_SPEED_BOOST_DURATION = bc.speed_boost_duration
+            self.BUFF_SLOW_DOWN_DURATION = bc.slow_down_duration
+            self.BUFF_CLEAR_DURATION = bc.clear_mode_duration
+        else:
+            self.BUFF_SPEED_BOOST_DURATION = 5000
+            self.BUFF_SLOW_DOWN_DURATION = 10000
+            self.BUFF_CLEAR_DURATION = 5000
+        self.BUFF_SPEED_BOOST_MULT = 0.5
+        self.BUFF_SLOW_DOWN_MULT = 1.5
 
         # ── 分数滚动动画 ──
         SCORE_ANIM_DURATION = 2000          # 固定 2 秒
@@ -124,21 +132,40 @@ class GameScreen(Scene):
             }
 
         def collect_npcs():
+            mgr = self.npc_manager
             npc_list = []
-            for i, npc in enumerate(self.npc_manager.npcs):
+            by_type: dict[str, int] = {}
+            for i, npc in enumerate(mgr.npcs):
+                type_id = npc.npc_type.npc_id
+                by_type[type_id] = by_type.get(type_id, 0) + 1
                 npc_list.append({
                     "index": i,
-                    "type": npc.npc_type.npc_id,
+                    "type": type_id,
                     "state": npc.spawn_state.name,
                     "length": len(npc.body),
                     "head": npc.head,
                     "direction": npc.current_direction,
                     "move_accumulator": npc._move_accumulator,
+                    "move_interval_ms": npc.move_interval_ms,
+                    "target_length": npc.target_length,
+                    "unfold_remaining": npc.unfold_remaining,
+                    "can_pickup": npc.npc_type.can_pickup,
+                    "has_drops": npc.npc_type.has_drops,
                 })
             return {
-                "alive_count": self.npc_manager.alive_count,
-                "total_count": self.npc_manager.total_count,
+                "alive_count": mgr.alive_count,
+                "total_count": mgr.total_count,
                 "list": npc_list,
+                "by_type": by_type,
+                "spawn_enabled": mgr.spawn_enabled,
+                "spawn_timer": mgr._spawn_timer,
+                "next_spawn_interval": mgr._next_spawn_interval,
+                "max_npcs": mgr.max_npcs,
+                "frozen": mgr.frozen,
+                "speed_multiplier": mgr.speed_multiplier,
+                "initial_spawn_count": mgr.initial_spawn_count,
+                "spawn_interval_min": mgr.spawn_interval_min,
+                "spawn_interval_max": mgr.spawn_interval_max,
             }
 
         def collect_items():
@@ -383,6 +410,9 @@ class GameScreen(Scene):
         # 正常游戏：累加时间并驱动步进
         self._move_accumulator += delta_ms
         effective_interval = MOVE_INTERVAL * self.buff_manager.get_speed_multiplier()
+        # 玩家 debug 速度倍率
+        if self.snake._speed_multiplier != 1.0:
+            effective_interval = int(effective_interval / self.snake._speed_multiplier)
         while self._move_accumulator >= effective_interval:
             self._move_accumulator -= effective_interval
             self._game_step()
@@ -415,23 +445,33 @@ class GameScreen(Scene):
         dx, dy = self.snake.next_direction
         new_head = (head[0] + dx, head[1] + dy)
 
-        # 1. 撞墙检测（移动前）— 墙壁永远致命
+        # 1. 撞墙检测（移动前）— 墙壁永远致命（除非 god_mode）
         if (new_head[0] < 0 or new_head[0] >= GRID_WIDTH or
                 new_head[1] < 0 or new_head[1] >= GRID_HEIGHT):
-            self._trigger_game_over()
-            return
+            self.debug_probe.record_collision("player", "wall", new_head)
+            if not self.snake.god_mode:
+                self._trigger_game_over()
+                return
+            # god_mode: 将蛇拉回边界内
+            new_head = (
+                max(0, min(GRID_WIDTH - 1, new_head[0])),
+                max(0, min(GRID_HEIGHT - 1, new_head[1])),
+            )
 
         # 2. 撞自身检测（移动前，预判）
         check_body = self.snake.body[1:] if self.snake.just_ate else self.snake.body[1:-1]
         if new_head in check_body:
-            self._trigger_game_over()
-            return
+            self.debug_probe.record_collision("player", "self", new_head)
+            if not self.snake.invincible:
+                self._trigger_game_over()
+                return
 
         # 3. 撞障碍物检测
         clear_mode = self.buff_manager.has_clear_mode()
         obstacle_hit = self._find_obstacle_at(new_head)
         if obstacle_hit:
-            if clear_mode:
+            self.debug_probe.record_collision("player", f"obstacle:{obstacle_hit.item_id}", new_head)
+            if clear_mode or self.snake.invincible:
                 self.item_manager.remove_item(obstacle_hit)
             else:
                 self._trigger_game_over()
@@ -440,7 +480,8 @@ class GameScreen(Scene):
         # 4. 撞NPC检测
         npc_hit = self._find_npc_at(new_head)
         if npc_hit:
-            if clear_mode:
+            self.debug_probe.record_collision("player", f"npc:{npc_hit.npc_type.npc_id}", new_head)
+            if clear_mode or self.snake.invincible:
                 npc_hit.kill()
             else:
                 self._trigger_game_over()
