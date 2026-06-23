@@ -8,111 +8,189 @@
 
 ---
 
-## [v0.11.0] - 2026-06-22
+## [v0.12.0] - 2026-06-24
 
-### ✨ Added — 调试面板全面升级（Dear ImGui + 多窗口控制面板 + 配置持久化）
-
-#### 概述
-
-将调试探针系统从手动 Pygame Surface 绘制升级为 Dear ImGui 即时模式 UI，
-新增 3 个独立控制面板窗口（玩家/NPC/道具），支持 JSON 配置持久化。
+### 🐛 Fixed — 暂停菜单输入模式同步 + 事件穿透修复
 
 #### 涉及文件
 
 | 文件 | 操作 |
 |:---|:---|
-| `debug/probe_core.py` | **修改** — 删除未使用的 `field` 导入和 `_scalars` 收集逻辑 |
-| `debug/probe_panel.py` | **重写** — 4 个独立 imgui 窗口（数据展示 + 玩家控制 + NPC 控制 + 道具控制） |
-| `debug/probe_window.py` | **重写** — 集成 imgui OpenGL 渲染，修复事件串扰和 VIDEORESIZE 联动 |
-| `debug/debug_config.py` | **新增** — JSON 配置持久化（PlayerConfig + NpcConfig + ItemConfig + PhaseConfig + WeightConfig + BuffConfig） |
-| `debug/__init__.py` | **修改** — 导出 DebugConfig 系列 |
-| `entities/player.py` | **修改** — 添加 `invincible`/`god_mode`/`_speed_multiplier` 调试标志 |
-| `entities/npc/npc_manager.py` | **重构** — 类常量改为实例变量，添加 `frozen`/`speed_multiplier`/`debug_spawn`/`debug_kill_all` |
-| `items/item_manager.py` | **修改** — 类常量改为实例变量，添加权重覆盖和启用开关接口 |
-| `items/difficulty_phases.py` | **重写** — 支持运行时 `DifficultyPhaseOverrides` 覆盖 |
-| `items/weight_calculator.py` | **修改** — 蛇长/分数因子系数可配置，支持权重覆盖和启用开关 |
-| `scenes/game_screen.py` | **修改** — 碰撞检测支持 `invincible`/`god_mode`，收集器扩展 NPC 数据，接受 debug_config |
-| `scene_manager.py` | **修改** — 加载 DebugConfig，传递 npc_manager/snake/item_manager/buff_manager 给 ProbeWindow |
-| `.gitignore` | **修改** — 添加 `imgui.ini`、`debug_config.json` |
-| `requirements.txt` | **修改** — 添加 `imgui[pygame]`、`PyOpenGL` |
+| `pause_menu.py` | **重写** — 输入模式追踪（鼠标/键盘双轨制同步） |
+| `scene_manager.py` | **修改** — 覆盖层消费事件后清空 `actions["context"]` |
+| `scenes/start_screen.py` | **修改** — 移除无效的 CONFIRM → LOBBY 逻辑 |
 
-#### 架构：4 窗口调试面板
+#### 改动详情
 
-```
-F1 打开调试面板
-  ├── [F1] DEBUG PROBE    — 数据展示（只读）
-  │    ├── Performance (FPS/帧耗时)
-  │    ├── Player Snake (状态)
-  │    ├── NPCs (列表+详情)
-  │    ├── Items (类型/移动/Buff)
-  │    ├── Weight Calc (权重详情)
-  │    ├── Collision (历史)
-  │    └── Stats (分数/连击/时间)
-  │
-  ├── Player Controls      — 玩家控制（读写）
-  │    ├── Move Config (间隔/速度倍率)
-  │    ├── Debug Flags (无敌/上帝/自动)
-  │    └── Status (只读状态+标签)
-  │
-  ├── NPC Controls         — NPC 控制（读写）
-  │    ├── Spawn Config (开关/数量/间隔)
-  │    ├── Runtime (冻结/速度/一键清场)
-  │    ├── Spawn Timer (进度条)
-  │    ├── Manual Spawn (手动生成按钮)
-  │    ├── Type Configs (只读展示)
-  │    └── Spawn Pool Weights (可调slider)
-  │
-  └── Items Controls       — 道具控制（读写）
-       ├── Spawn Config (间隔/上限/初始数/移动速度)
-       ├── Item Weights (每类型开关+权重slider)
-       ├── Difficulty Phases (阶段阈值+分类toggle)
-       ├── Weight Formula (蛇长/分数系数)
-       ├── Buff Duration (加速/减速/清场时长)
-       ├── Runtime (清空/手动生成按钮)
-       └── On Screen Stats (场上统计)
+**1. 输入模式追踪（`pause_menu.py`）**
+
+新增 `_input_mode` / `_hovered` / `_prev_mouse_pos` 状态，解决鼠标与键盘高亮冲突：
+
+- 打开菜单时无默认高亮（`selected = None`）
+- 鼠标悬停 → 显示鼠标高亮，`_input_mode = "mouse"`
+- 键盘↑↓ → 切换到 `_input_mode = "keyboard"`，从鼠标位置或默认位置开始
+- 鼠标再移动 → 切回鼠标模式
+- 只在鼠标**真正移动**时触发模式切换（`_prev_mouse_pos` 对比），防止键盘操作后被静止鼠标"拉回"
+
+| 场景 | selected | _hovered | _input_mode | 高亮 |
+|:---|:---|:---|:---|:---|
+| 打开菜单 | None | None | mouse | 无 |
+| 鼠标移到按钮2 | None | 2 | mouse | 按钮2 |
+| 按键盘↑（鼠标不动） | 1 | 2 | keyboard | 按钮1 |
+| 鼠标再动到按钮3 | 3 | 3 | mouse | 按钮3 |
+
+**2. 事件穿透修复（`scene_manager.py:103`）**
+
+覆盖层处理事件后清空 `actions["context"]`，防止同一 CONFIRM 被底层场景二次消费：
+
+```python
+if result is not None:
+    actions["context"] = set()
 ```
 
-#### 配置持久化（`debug/debug_config.py`）
+**3. 移除死代码（`scenes/start_screen.py:44-45`）**
 
-| 配置类 | 控制内容 |
-|:---|:---|
-| `PlayerConfig` | 移动间隔、无敌、上帝模式、速度倍率 |
-| `NpcConfig` | 出生开关、数量、间隔、冻结、权重池 |
-| `ItemConfig` | 生成间隔、上限、每类型权重覆盖/启用开关 |
-| `PhaseConfig` | 各阶段分数/蛇长阈值、分类允许列表、倍率 |
-| `WeightConfig` | 蛇长系数（障碍物/减益/幸运）、分数压制因子 |
-| `BuffConfig` | 加速/减速/清场持续时间 |
-
-**流程**: 面板改值 → 写入 config + 游戏实例 → 自动保存 `debug_config.json` → 下次启动恢复。
-
-#### 碰撞记录修复
-
-- `GameScreen._game_step()` 4 个碰撞点添加 `debug_probe.record_collision()` 调用
-- 碰撞历史现在正确记录：撞墙/撞自身/撞障碍物/撞 NPC
+删除无效的 `CONFIRM → LOBBY` 逻辑，该逻辑原本是事件穿透的受害者。
 
 #### Bug 修复
 
-| 问题 | 修复 |
+| 错误 | 修复 |
 |:---|:---|
-| 探针窗口与游戏窗口联动 | 添加 `event.window` 过滤，拦截 `VIDEORESIZE` 不传给 renderer |
-| `imgui.create_context()` 重复创建 | 移到 `__init__` 只执行一次 |
-| `weight_snapshot` key 不存在 | 删除死代码 |
-| `_scalars` 收集了但未展示 | 删除收集逻辑和 `set()` 方法 |
-| NPC Controls `tree_pop()` 多余 | 删除多余的 `imgui.tree_pop()` |
-| `slider_int` 不支持 `step` 参数 | 移除 `step=` 参数 |
+| 暂停菜单键盘/鼠标高亮冲突（双重高亮） | 引入 `_input_mode` 追踪，根据输入源决定显示哪个高亮 |
+| 键盘操作后被静止鼠标"拉回" | 通过 `_prev_mouse_pos` 对比，只在鼠标真正移动时切换模式 |
+| 暂停菜单关闭后触发意外场景切换 | 覆盖层消费事件后清空 `actions["context"]` |
+
+---
+
+## [v0.11.0] - 2026-06-23
+
+### ✨ Added — 调试面板系统全面升级（Dear ImGui 集成 + 4 窗口控制面板 + JSON 配置持久化）
+
+#### 涉及文件
+
+| 文件 | 操作 |
+|:---|:---|
+| `debug/__init__.py` | **修改** — 导出新增模块 |
+| `debug/probe_core.py` | **修改** — 新增碰撞历史记录 `record_collision()` |
+| `debug/probe_panel.py` | **重写** — 4 个独立 imgui 窗口（数据展示 / Player Controls / NPC Controls / Items Controls） |
+| `debug/probe_window.py` | **重写** — Dear ImGui OpenGL 窗口管理（事件过滤、VIDEORESIZE 拦截） |
+| `debug/debug_config.py` | **新增** — JSON 配置持久化（7 个子配置 dataclass） |
+| `entities/player.py` | **修改** — 新增 `invincible` / `god_mode` 标志供调试面板使用 |
+| `entities/npc/npc_manager.py` | **修改** — 类常量重构为实例变量；新增 debug 控制接口 |
+| `items/item_manager.py` | **修改** — 新增 `weight_overrides` / `enabled_overrides` 字典；面板可控制每种道具权重和开关 |
+| `items/difficulty_phases.py` | **修改** — 改为动态构建模式（`DifficultyPhaseOverrides` + `set_phase_overrides()`） |
+| `items/weight_calculator.py` | **修改** — 蛇长/分数因子系数改为模块级变量 + setter 函数，支持面板调节 |
+| `scenes/game_screen.py` | **修改** — 4 个碰撞点添加 `record_collision()` 调用；碰撞检测支持 debug 标志 |
+| `scene_manager.py` | **修改** — 加载 `DebugConfig`，传递引用给 ProbeWindow |
+| `settings.py` | **修改** — 新增 `DEBUG_MODE = False` 开关 |
+
+#### 改动详情
+
+**1. Dear ImGui 集成（`debug/probe_window.py`）**
+
+- 使用 pyimgui 2.0.0 + PyOpenGL 创建独立 OpenGL 渲染窗口
+- `pygame.Surface` → `imgui.get_draw_data()` → OpenGL 渲染管线
+- 拦截 `VIDEORESIZE` 事件防止 PygameRenderer 改变主显示器
+- 事件过滤：只处理目标窗口的事件，防止多窗口串扰
+- 位置记忆：关闭后重新打开恢复上次位置
+
+**2. 四窗口分离布局（`debug/probe_panel.py`）**
+
+| 窗口 | 内容 |
+|:---|:---|
+| **Data Display** | FPS、帧耗时、碰撞历史、蛇状态、道具统计 |
+| **Player Controls** | 无敌模式、God Mode、蛇长重置、分数加减 |
+| **NPC Controls** | 出生数量、最大NPC数、出生间隔、各类型启用开关、碰撞记录开关 |
+| **Items Controls** | 全局生成配置、每类型权重/启用开关、难度阶段分类toggle、权重公式系数、Buff持续时间 |
+
+**3. JSON 配置持久化（`debug/debug_config.py`）**
+
+7 个子配置 dataclass：
+
+```python
+DebugConfig:
+  player: PlayerConfig       # 无敌、god_mode、蛇长
+  npc: NPCConfig             # 出生数量、最大数、间隔、类型开关
+  item: ItemConfig           # 生成间隔、最大数、权重覆盖
+  phase: PhaseConfig         # 难度阶段分类开关
+  weight: WeightConfig       # 蛇长/分数因子系数
+  buff: BuffConfig           # 加速/减速持续时间
+  display: DisplayConfig     # 显示选项
+```
+
+- 启动时 `load()` 恢复上次配置
+- 面板修改时 `save_if_needed()` 持久化
+- `debug_config.json` 已加入 `.gitignore`，开发者本地配置
+
+**4. NPCManager 调试接口（`entities/npc/npc_manager.py`）**
+
+- 类常量（`INITIAL_NPC_COUNT`、`MAX_NPCS`、`SPAWN_INTERVAL_MS` 等）重构为实例变量
+- 新增 debug 控制接口：直接读写实例变量即可修改行为
+- NPC 类型配置（`NPC_TYPE_DEFS`）保持只读展示，运行时修改需实例级覆盖
+
+**5. ItemManager 调试接口（`items/item_manager.py`）**
+
+- `weight_overrides: dict[str, float]` — 面板可覆盖每种道具的权重
+- `enabled_overrides: dict[str, bool]` — 面板可启用/禁用特定道具类型
+
+**6. difficulty_phases 动态构建（`items/difficulty_phases.py`）**
+
+- `DifficultyPhaseOverrides` 数据类：存储各阶段的分类开关
+- `set_phase_overrides()` 全局函数：面板修改后立即重建阶段列表
+- 替代原来的静态配置，支持运行时调整
+
+**7. weight_calculator 可配置系数（`items/weight_calculator.py`）**
+
+- 蛇长因子系数、分数因子系数改为模块级变量
+- `set_length_factor()` / `set_score_factor()` setter 函数
+- 面板修改后下次权重计算自动使用新值
+
+**8. 碰撞记录（`scenes/game_screen.py` + `debug/probe_core.py`）**
+
+- 4 个碰撞点添加 `record_collision()` 调用：
+  - 玩家撞墙
+  - 玩家撞NPC身体
+  - 玩家撞障碍物
+  - 玩家撞道具
+- `probe_core.py` 新增碰撞历史列表（最近 20 条）
+
+#### Bug 修复
+
+| 错误 | 修复 |
+|:---|:---|
+| `imgui.tree_pop()` ImGuiError: IDStack.Size > 1 | 删除 NPC Controls 中多余的 `imgui.tree_pop()` |
+| `slider_int() got unexpected keyword argument 'step'` | 移除所有 `step=` 参数 |
 | 中文道具名显示为 `??????` | 改用 `item_id`（英文）显示 |
-| `_panel` 为 None 时调用 sync | 添加 None 检查，延迟同步到 panel 创建时 |
+| `probe_window._panel` 为 None 时调用 sync | 添加 None 检查，延迟同步到 panel 创建时 |
+| `VIDEORESIZE` 事件导致窗口联动 | 拦截 VIDEORESIZE 不传给 PygameRenderer |
+| `imgui.create_context()` 重复创建 | 移到 `ProbeWindow.__init__` 只执行一次 |
 
-#### 后续规划
+#### 架构
 
-- [x] 道具权重系统（动态调整、阶段解锁、安全区）
-- [x] 多类型道具功能实现（加速/减速/障碍物/清场）
-- [x] 蛇的 Buff 系统（时效性效果管理）
-- [x] 调试控制面板（NPC/玩家/道具运行时控制）
-- [x] 配置持久化（JSON 自动保存/恢复）
-- [ ] 碰撞系统优化（统一 float 碰撞或网格碰撞）
-- [ ] 道具拾取音效与视觉反馈
-- [ ] ImGui 中文字体支持
+```
+GameScreen
+  └─ SceneManager
+       └─ ProbeWindow          ← 独立 OpenGL 窗口
+            └─ ProbePanel      ← 4 个 imgui 窗口
+                 ├─ DataDisplay    ← 从 probe_core.snapshot 读取
+                 ├─ PlayerControls  ← 读写 player 实例变量
+                 ├─ NPCControls     ← 读写 npc_manager 实例变量
+                 └─ ItemControls    ← 读写 item_manager 实例变量
+                                         ↓
+                                    DebugConfig  ← JSON 持久化
+```
+
+#### 开发者配置
+
+- `settings.py` 中 `DEBUG_MODE = False` 时整个面板不启用
+- 面板改值即时生效（直接写实例变量），JSON 持久化用于跨会话恢复
+- 最终值需手动写回代码（面板是调试工具，不替代代码配置）
+
+#### 已知限制
+
+- imgui 默认字体不支持中文，面板用英文 `item_id` 显示道具名
+- NPC 类型配置（`NPC_TYPE_DEFS`）是全局字典，面板当前只读展示
+- SpawnManager 选址参数（`MAX_SPAWN_ATTEMPTS` 等）仍是类常量
 
 ---
 
@@ -250,7 +328,7 @@ GameScreen
 - [x] 道具权重系统（动态调整、阶段解锁、安全区）
 - [x] 多类型道具功能实现（加速/减速/障碍物/清场）
 - [x] 蛇的Buff系统（时效性效果管理）
-- [x] 配置面板（调试/测试/平衡性调整） → 见 v0.11.0
+- [ ] 配置面板（调试/测试/平衡性调整）
 - [ ] 碰撞系统优化（统一float碰撞或网格碰撞）
 - [ ] 道具拾取音效与视觉反馈
 

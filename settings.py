@@ -75,3 +75,32 @@ GAME_BG_LAYERS = [
     "Large_format.png",
     "Score_board.png",
 ]
+
+# ==================== 暂停菜单参数 ====================
+PAUSE_MENU_PANEL_WIDTH = 400
+PAUSE_MENU_BTN_WIDTH = 280
+PAUSE_MENU_BTN_HEIGHT = 50
+PAUSE_MENU_BTN_GAP = 16
+PAUSE_MENU_PADDING_TOP = 60
+PAUSE_MENU_PADDING_BOTTOM = 40
+PAUSE_MENU_PADDING_X = 60
+PAUSE_MENU_MASK_ALPHA = 180
+
+PAUSE_MENU_COLORS = {
+    "mask": (0, 0, 0),
+    "panel_bg": (30, 35, 50),
+    "panel_border": (80, 180, 200),
+    "title": (255, 255, 255),
+    "btn_text": (220, 220, 230),
+    "btn_bg": (50, 60, 80),
+    "btn_bg_hover": (70, 150, 170),
+    "btn_border_hover": (120, 210, 230),
+    "hint": (140, 140, 160),
+}
+
+PAUSE_MENU_ITEMS = [
+    {"id": "resume",     "label": "继续游戏", "action": "RESUME"},
+    {"id": "settings",   "label": "游戏设置", "action": "SETTINGS"},
+    {"id": "exit_lobby", "label": "退出本局", "action": "EXIT_LOBBY"},
+    {"id": "exit_game",  "label": "退出游戏", "action": "EXIT_GAME"},
+]

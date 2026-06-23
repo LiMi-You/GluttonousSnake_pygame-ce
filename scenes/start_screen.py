@@ -36,14 +36,11 @@ class StartScreen(Scene):
     def handle_input(self, input_state: dict) -> str |None:
         """
         处理单个事件，返回场景切换信号
-        ✅ 场景只关心“动作”，不关心是键盘、手柄还是鼠标
+        ✅ 场景只关心"动作"，不关心是键盘、手柄还是鼠标
         """
         #测试用排查断点
         # print(f"🎮 场景输入状态: {input_state}")
 
-        if "CONFIRM" in input_state["context"]:
-            return "LOBBY"
-        
         # 鼠标点击仍可直接处理（UI交互常见，，不强制走 InputManager）
         if pygame.mouse.get_pressed()[0]:
             if self.btn_start.collidepoint(pygame.mouse.get_pos()):

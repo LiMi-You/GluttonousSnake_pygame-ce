@@ -32,8 +32,8 @@ class InputManager:
                 pygame.K_x: "JUMP"
             },
             "OVERLAY": {
-                pygame.K_LEFT: "NAV_LEFT",
-                pygame.K_RIGHT: "NAV_RIGHT",
+                pygame.K_UP: "NAV_UP",
+                pygame.K_DOWN: "NAV_DOWN",
                 pygame.K_RETURN: "CONFIRM",
                 pygame.K_SPACE: "CONFIRM",
                 pygame.K_ESCAPE: "CANCEL",

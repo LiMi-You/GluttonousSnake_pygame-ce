@@ -2,7 +2,7 @@
 import pygame
 from scenes.registry import get_scene_class, SCENE_REGISTRY
 from input_manager import InputManager
-from quit_overlay import QuitOverlay
+from pause_menu import PauseMenu
 from debug import DebugProbe, ProbeWindow, DebugConfig
 
 class SceneManager:
@@ -13,8 +13,8 @@ class SceneManager:
         self.current_scene = None
         self._running = True
 
-        # 退出确认覆盖层
-        self.quit_overlay = QuitOverlay(screen.get_width(), screen.get_height())
+        # 暂停菜单
+        self.pause_menu = PauseMenu()
 
         # 调试探针
         self.debug_probe = DebugProbe()
@@ -88,8 +88,8 @@ class SceneManager:
         if "TOGGLE_DEBUG" in actions["global"]:
             self.probe_window.toggle()
         
-        # ── 退出覆盖层逻辑 ──
-        if self.quit_overlay.active:
+        # ── 暂停菜单逻辑 ──
+        if self.pause_menu.active:
             saved_ctx = self.input_manager.context
             self.input_manager.set_context("OVERLAY")
             overlay_actions = self.input_manager.get_actions()
@@ -99,32 +99,44 @@ class SceneManager:
             overlay_actions["mouse_clicked"] = mouse_pressed[0]
             overlay_actions["mouse_pos"] = pygame.mouse.get_pos()
 
-            result = self.quit_overlay.handle_input(overlay_actions)
-            if result is True:
+            result = self.pause_menu.handle_input(overlay_actions)
+
+            if result == "RESUME":
+                self.pause_menu.hide()
+            elif result == "SETTINGS":
+                pass
+            elif result == "EXIT_LOBBY":
+                self.pause_menu.hide()
+                self.switch("LOBBY")
+            elif result == "EXIT_GAME":
                 return False
+
+            if result is not None:
+                actions["context"] = set()
         else:
             if "GLOBAL_QUIT" in actions["global"]:
-                self.quit_overlay.show()
+                self.pause_menu.show()
         
         # 🔸 兜底处理：场景为空时只处理全局事件，跳过渲染
         if not self.current_scene:
             return True
     
-        # 3. 交给当前场景处理
-        if not self.quit_overlay.active:
+        # 3. 交给当前场景处理（菜单激活时跳过）
+        if not self.pause_menu.active:
             next_scene_id = self.current_scene.handle_input(actions)
             if next_scene_id and next_scene_id != self.current_scene_id:
                 self.switch(next_scene_id)
             
-        # 4. 场景更新逻辑
-        next_from_update = self.current_scene.update()
-        if next_from_update and next_from_update != self.current_scene_id:
-            self.switch(next_from_update)
+        # 4. 场景更新逻辑（菜单激活时跳过 → 游戏静止）
+        if not self.pause_menu.active:
+            next_from_update = self.current_scene.update()
+            if next_from_update and next_from_update != self.current_scene_id:
+                self.switch(next_from_update)
         
         # 5. 场景渲染
         self.current_scene.draw(self.screen)
         
-        # 6. 覆盖层渲染
-        self.quit_overlay.draw(self.screen)
+        # 6. 暂停菜单渲染（在场景之上）
+        self.pause_menu.draw(self.screen)
         
         return True
